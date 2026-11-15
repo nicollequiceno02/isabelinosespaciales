@@ -148,7 +148,7 @@
   #vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.45) 100%); }
 
   /* ---------- Overlays (start / pause) ---------- */
-  .overlay { position: fixed; inset: 0; display: flex; align-items: safe center; justify-content: center; padding: 32px; overflow: auto; }
+  .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 32px; overflow: auto; }
   #start-screen { background: linear-gradient(90deg, rgba(5,6,10,.92) 0%, rgba(5,6,10,.72) 45%, rgba(5,6,10,.25) 100%); }
   .start-wrap { width: min(1180px, 100%); display: grid; grid-template-columns: 1.05fr 1fr; gap: 48px; align-items: center; }
   .start-kicker { display: flex; align-items: center; gap: 10px; font-size: 12px; letter-spacing: .22em; text-transform: uppercase; color: var(--mars); font-weight: 600; }
@@ -190,37 +190,6 @@
   .keys { display: grid; grid-template-columns: auto 1fr; gap: 10px 16px; align-items: center; font-size: 14px; }
   .keys kbd { font-family: var(--mono); font-size: 12px; padding: 4px 9px; border-radius: 7px; background: rgba(255,255,255,.08); border: 1px solid var(--line-strong); white-space: nowrap; justify-self: start; }
   .modal .cta { margin-top: 24px; }
-  #complete-screen { background: rgba(4,6,10,.55); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
-  .complete-modal { position: relative; overflow: hidden; text-align: center; width: min(540px, 100%); background: var(--glass-strong); }
-  .complete-modal::before { content: ""; position: absolute; left: 50%; top: -120px; width: 420px; height: 260px; transform: translateX(-50%);
-    background: radial-gradient(ellipse at center, rgba(61,220,151,.28), transparent 70%); pointer-events: none; }
-  .complete-modal > * { position: relative; }
-  .mc-badge { width: 86px; height: 86px; margin: 6px auto 16px; border-radius: 50%; display: grid; place-items: center;
-    background: radial-gradient(circle at 35% 30%, #8ef5c8, #1f9e68); box-shadow: 0 0 0 8px rgba(61,220,151,.14), 0 0 44px rgba(61,220,151,.55);
-    animation: mcPop .6s cubic-bezier(.2,1.6,.4,1) both; }
-  .mc-badge svg { width: 44px; height: 44px; fill: none; stroke: #04120b; stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round;
-    stroke-dasharray: 40; stroke-dashoffset: 40; animation: mcDraw .45s .35s ease-out forwards; }
-  .complete-modal .label { color: var(--green); }
-  #mc-title { margin: 8px 0 10px; font-size: 30px; line-height: 1.15; }
-  #mc-body { color: #c9d2de; line-height: 1.55; margin: 0 0 22px; font-size: 15px; }
-  .mc-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 24px; }
-  .mc-stats div { background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 12px; padding: 10px 8px; }
-  .mc-stats b { display: block; font-family: var(--mono); font-size: 19px; margin-top: 4px; }
-  .complete-modal .cta { flex-direction: column; margin-top: 0; }
-  .complete-modal .cta .btn-primary { justify-content: center; }
-  .mc-row { display: flex; gap: 8px; } .mc-row button { flex: 1; padding: 12px 10px; font-size: 14px; }
-  #mc-confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-  .confetti { position: absolute; top: -16px; width: 8px; height: 14px; border-radius: 2px; animation: mcFall 2.6s ease-in forwards; }
-  @keyframes mcPop { from { transform: scale(.3); opacity: 0; } }
-  @keyframes mcDraw { to { stroke-dashoffset: 0; } }
-  @keyframes mcFall { to { transform: translateY(640px) rotate(600deg); opacity: 0; } }
-  @media (max-height: 720px) {
-    .complete-modal { padding: 20px 24px; }
-    .mc-badge { width: 64px; height: 64px; margin: 0 auto 10px; } .mc-badge svg { width: 34px; height: 34px; }
-    #mc-title { font-size: 25px; margin: 4px 0 6px; } #mc-body { margin-bottom: 14px; } .mc-stats { margin-bottom: 16px; }
-    .complete-modal .cta { gap: 8px; } .complete-modal .cta button { padding-top: 10px; padding-bottom: 10px; }
-  }
-  @media (prefers-reduced-motion: reduce) { .mc-badge, .mc-badge svg { animation: none; stroke-dashoffset: 0; } }
   #pause-screen, #help-screen { background: rgba(4,6,10,.6); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 
   .lang-switch, .seg { display: inline-flex; gap: 2px; padding: 4px; border-radius: 12px; background: rgba(255,255,255,.04); }
@@ -410,30 +379,6 @@
       <kbd>M</kbd><span data-i18n="k_mission">Switch mission (samples / Perseverance route)</span>
     </div>
     <div class="cta"><button class="btn-primary" id="btn-help-close" data-i18n="gotIt">Got it</button></div>
-  </div>
-</section>
-
-<!-- ======================= MISSION COMPLETE ======================= -->
-<section class="overlay hidden" id="complete-screen" role="dialog" aria-modal="true" aria-labelledby="mc-title">
-  <div class="modal panel complete-modal">
-    <div id="mc-confetti" aria-hidden="true"></div>
-    <div class="mc-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
-    <div class="label" id="mc-kicker">—</div>
-    <h2 id="mc-title" data-i18n="mcTitle">Mission Complete — Successful!</h2>
-    <p id="mc-body"></p>
-    <div class="mc-stats">
-      <div><span class="label" id="mc-s1-l">Samples</span><b id="mc-s1">5/5</b></div>
-      <div><span class="label" data-i18n="mcDistance">Distance</span><b id="mc-s2">0 m</b></div>
-      <div><span class="label" data-i18n="mcTime">Mission time</span><b id="mc-s3">0:00</b></div>
-    </div>
-    <div class="cta">
-      <button class="btn-primary" id="btn-mc-continue" data-i18n="mcContinue">Keep exploring</button>
-      <div class="mc-row">
-        <button class="btn-ghost" id="btn-mc-next">Next site</button>
-        <button class="btn-ghost" id="btn-mc-switch">Switch mission</button>
-      </div>
-      <button class="btn-ghost" id="btn-mc-menu" data-i18n="mcMenu">Main menu</button>
-    </div>
   </div>
 </section>
 
@@ -1003,11 +948,6 @@ const I18N = {
     routeIntro: 'Mission: Perseverance route',
     routeIntroBody: 'Retrace the 2021-2024 path of the NASA Perseverance rover in Jezero Crater, traced to scale on this terrain. Drive to the orange beacons in order.',
     waypointReached: n => `Waypoint reached: ${n}`, wrongOrder: 'Visit this point first:', missionSwitched: n => `Mission: ${n}`,
-    mcTitle: 'Mission Complete — Successful!',
-    mcBodyScience: n => `All 5 science samples at ${n} have been analyzed. Great work, explorer!`,
-    mcBodyRoute: n => `You retraced the full Perseverance route on ${n}, from Octavia E. Butler Landing to Neretva Vallis.`,
-    mcSamples: 'Samples', mcWaypoints: 'Waypoints', mcDistance: 'Distance', mcTime: 'Mission time',
-    mcContinue: 'Keep exploring', mcNext: n => `Next site: ${n}`, mcSwitchTo: n => `Try: ${n}`, mcMenu: 'Main menu',
     routeComplete: 'Perseverance route complete!',
     routeCompleteBody: 'You retraced the Mars 2020 traverse from Octavia E. Butler Landing to Neretva Vallis. Try the route on another terrain (keys 1-4).',
     jezeroName: 'Jezero Crater (center)', jezeroFact: 'Official coordinates of the center of this 45 km impact crater.',
@@ -1095,11 +1035,6 @@ const I18N = {
     routeIntro: 'Misión: Ruta Perseverance',
     routeIntroBody: 'Recorre el trayecto 2021-2024 del rover Perseverance de la NASA en el cráter Jezero, trazado a escala sobre este terreno. Conduce hasta las balizas naranjas en orden.',
     waypointReached: n => `Punto alcanzado: ${n}`, wrongOrder: 'Primero visita este punto:', missionSwitched: n => `Misión: ${n}`,
-    mcTitle: '¡Misión completada con éxito!',
-    mcBodyScience: n => `Analizaste las 5 muestras científicas en ${n}. ¡Excelente trabajo, explorador!`,
-    mcBodyRoute: n => `Recorriste la ruta completa del Perseverance en ${n}, desde Octavia E. Butler Landing hasta Neretva Vallis.`,
-    mcSamples: 'Muestras', mcWaypoints: 'Puntos de ruta', mcDistance: 'Recorrido', mcTime: 'Tiempo de misión',
-    mcContinue: 'Seguir explorando', mcNext: n => `Siguiente sitio: ${n}`, mcSwitchTo: n => `Probar: ${n}`, mcMenu: 'Menú principal',
     routeComplete: '¡Ruta Perseverance completada!',
     routeCompleteBody: 'Recorriste el trayecto de Mars 2020 desde Octavia E. Butler Landing hasta Neretva Vallis. Prueba la ruta en otro terreno (teclas 1-4).',
     jezeroName: 'Cráter Jezero (centro)', jezeroFact: 'Coordenadas oficiales del centro de este cráter de impacto de 45 km de diámetro.',
@@ -1378,7 +1313,7 @@ function completeWaypoint(i) {
   w.done = true; r.next = i + 1;
   refreshRouteVisuals(); renderMissionList();
   toast(t('waypointReached', `${i + 1}. ${routeName(i)}`), `${fmtCoord(w.geo)} · ${t('route').facts[i]}`, 'ok');
-  if (r.next === r.wps.length) setTimeout(() => showMissionComplete('route'), 1400);
+  if (r.next === r.wps.length) setTimeout(() => toast(t('routeComplete'), t('routeCompleteBody'), 'ok'), 1400);
 }
 
 function renderRouteList() {
@@ -1446,7 +1381,7 @@ function load_terrain(key, { silent = false } = {}) {
   rover.underground = false; state.elevator = null;
 
   // Reposition the rover at (0, ·, -12) as in the original
-  rover.velocity_y = 0; rover.yaw = 0; rover.distance = 0; power = 100; state.elapsed = 0;
+  rover.velocity_y = 0; rover.yaw = 0; rover.distance = 0; power = 100;
   buildPOIs(key, terrain);
   buildRoute(terrain);
   placeRoverStart();
@@ -1506,7 +1441,7 @@ canvas.addEventListener('pointermove', e => {
 canvas.addEventListener('wheel', e => { e.preventDefault(); orbit.distance = clamp(orbit.distance + e.deltaY * 0.02, 6, 50); }, { passive: false });
 
 function updateCamera(dt) {
-  if (state.mode === 'menu' || state.mode === 'complete') orbit.yaw += dt * 0.07;
+  if (state.mode === 'menu') orbit.yaw += dt * 0.07;
   const rp = THREE.MathUtils.degToRad(orbit.pitch);
   const target = rover.position.clone().add(new THREE.Vector3(0, 2, 0));
   const desired = target.clone().add(new THREE.Vector3(Math.sin(orbit.yaw) * Math.cos(rp), Math.sin(rp), Math.cos(orbit.yaw) * Math.cos(rp)).multiplyScalar(state.mode === 'menu' ? 26 : orbit.distance));
@@ -1528,8 +1463,6 @@ window.addEventListener('keydown', e => {
   if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'f1', 'f2', 'f3', 'f4'].includes(k)) e.preventDefault();
   keys[k] = true;
   if (e.repeat) return;
-  if (k === 'escape' && !document.getElementById('complete-screen').classList.contains('hidden')) { document.getElementById('btn-mc-continue').click(); return; }
-  if (state.mode === 'complete' && k !== 'l') return;
   if (k === 'escape') { if (!document.getElementById('help-screen').classList.contains('hidden')) closeHelp(); else if (state.mode === 'play') pause(); else if (state.mode === 'pause') resume(); return; }
   if (['1', '2', '3', '4'].includes(k)) selectTerrain(k);
   else if (/^f[1-4]$/.test(k)) selectTerrain(k[1]);
@@ -1637,7 +1570,7 @@ function completePOI(poi) {
   poi.gem.material.color.set(0x3ddc97); poi.gem.material.emissive.set(0x3ddc97); poi.ring.material.color.set(0x3ddc97);
   const n = state.pois.filter(q => q.done).length;
   toast(t('sampleAnalyzed', poiName(poi)), siteText(state.current_key).facts[poi.idx], 'ok');
-  if (n === state.pois.length) setTimeout(() => showMissionComplete('science'), 1400);
+  if (n === state.pois.length) setTimeout(() => toast(t('missionComplete', terrainName(state.current_key)), t('missionCompleteBody'), 'ok'), 1200);
   renderMissionList();
 }
 function renderMissionList() {
@@ -1736,7 +1669,6 @@ function applyLanguage(l) {
     const tags = c.querySelector('.tags'); tags.replaceChildren(...txt.tags.map(tg => { const sp = document.createElement('span'); sp.textContent = tg; return sp; }));
   });
   if (state.current_terrain) { renderSiteName(); renderMissionList(); }
-  if (state.completeInfo) renderMissionComplete();
 }
 function renderSiteName() {
   const n = terrainName(state.current_key);
@@ -1771,50 +1703,6 @@ function startGame() {
   if (state.mission === 'route') toast(t('routeIntro'), t('routeIntroBody'), 'ok');
   else toast(t('landing', terrainName(state.current_key)), t('landingBody'), 'ok');
 }
-// ---------- Mission complete popup ----------
-const nextSiteKey = k => String((Number(k) % 4) + 1);
-function showMissionComplete(kind) {
-  if (state.mode !== 'play') return;
-  state.completeInfo = { kind, key: state.current_key, distance: rover.distance, elapsed: state.elapsed };
-  renderMissionComplete();
-  state.mode = 'complete';
-  $('prompt').classList.add('hidden');
-  $('complete-screen').classList.remove('hidden');
-  launchConfetti();
-  $('btn-mc-continue').focus();
-}
-function renderMissionComplete() {
-  const c = state.completeInfo; if (!c) return;
-  const total = c.kind === 'route' ? state.route.wps.length : state.pois.length;
-  $('mc-kicker').textContent = `${t('m_' + c.kind)} · ${terrainName(c.key)}`;
-  $('mc-body').textContent = t(c.kind === 'route' ? 'mcBodyRoute' : 'mcBodyScience', terrainName(c.key));
-  $('mc-s1-l').textContent = t(c.kind === 'route' ? 'mcWaypoints' : 'mcSamples');
-  $('mc-s1').textContent = `${total}/${total}`;
-  $('mc-s2').textContent = c.distance > 1000 ? `${(c.distance / 1000).toFixed(2)} km` : `${c.distance.toFixed(0)} m`;
-  $('mc-s3').textContent = `${Math.floor(c.elapsed / 60)}:${String(Math.floor(c.elapsed % 60)).padStart(2, '0')}`;
-  $('btn-mc-next').textContent = t('mcNext', terrainName(nextSiteKey(c.key)));
-  $('btn-mc-switch').textContent = t('mcSwitchTo', t('m_' + (c.kind === 'route' ? 'science' : 'route')));
-}
-function closeMissionComplete() {
-  $('complete-screen').classList.add('hidden'); $('mc-confetti').replaceChildren();
-  state.completeInfo = null; state.mode = 'play'; canvas.focus();
-}
-function launchConfetti() {
-  const box = $('mc-confetti'); box.replaceChildren();
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const cols = ['#ff6a3d', '#ffb547', '#3ddc97', '#4fd1ff', '#ffffff'];
-  for (let i = 0; i < 44; i++) {
-    const c = document.createElement('i'); c.className = 'confetti';
-    Object.assign(c.style, { left: `${Math.random() * 100}%`, background: cols[i % cols.length],
-      animationDelay: `${Math.random() * 0.7}s`, animationDuration: `${2 + Math.random() * 1.6}s` });
-    box.appendChild(c);
-  }
-}
-$('btn-mc-continue').onclick = () => closeMissionComplete();
-$('btn-mc-next').onclick = () => { const k = nextSiteKey(state.current_key); closeMissionComplete(); selectTerrain(k); };
-$('btn-mc-switch').onclick = () => { closeMissionComplete(); setMission(state.mission === 'route' ? 'science' : 'route'); };
-$('btn-mc-menu').onclick = () => { closeMissionComplete(); toMenu(); };
-
 function pause() { state.mode = 'pause'; $('pause-screen').classList.remove('hidden'); }
 function resume() { state.mode = 'play'; $('pause-screen').classList.add('hidden'); canvas.focus(); }
 function toMenu() {
@@ -1978,13 +1866,11 @@ if (params.get('terrain') && TERRAIN_PRESETS[params.get('terrain')]) load_terrai
 if (params.get('weather') && WEATHER[params.get('weather')]) weather.apply(params.get('weather'), true);
 if (params.has('play')) startGame();
 if (params.has('tunnels')) toggle_tunnels();
-if (params.has('debug')) window.marsDebug = { state, rover, showMissionComplete };   // test hook, only with ?debug
 
 const clock = new THREE.Clock();
 function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(clock.getDelta(), 0.05);
-  if (state.mode === 'play') state.elapsed += dt;
   if (state.mode !== 'pause') {
     weather.update(dt);
     updateRover(dt);
