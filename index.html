@@ -1,0 +1,2008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mars · Terrain Simulator</title>
+<meta name="description" content="Explore Mars in 3D: Valles Marineris, Gale Crater, the North Pole and Olympus Mons. A project for the NASA International Space Apps Challenge.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #07090d;
+    --glass: rgba(9, 12, 18, 0.62);
+    --glass-strong: rgba(9, 12, 18, 0.86);
+    --line: rgba(255, 255, 255, 0.09);
+    --line-strong: rgba(255, 255, 255, 0.18);
+    --text: #eef1f5;
+    --muted: #93a0b2;
+    --mars: #ff6a3d;
+    --mars-deep: #c2401c;
+    --cyan: #4fd1ff;
+    --green: #3ddc97;
+    --amber: #ffb547;
+    --red: #ff4d4d;
+    --radius: 14px;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    --sans: "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--sans); -webkit-font-smoothing: antialiased; }
+  canvas#scene { position: fixed; inset: 0; display: block; touch-action: none; outline: none; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .hidden { display: none !important; }
+  .mono { font-family: var(--mono); }
+
+  /* ---------- Glass panels ---------- */
+  .panel {
+    background: var(--glass); border: 1px solid var(--line); border-radius: var(--radius);
+    backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2);
+    box-shadow: 0 10px 30px rgba(0,0,0,.35);
+  }
+  .label { font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+
+  /* ---------- HUD layout ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; }
+  #hud > * { pointer-events: auto; }
+
+  .topbar { position: absolute; top: 16px; left: 16px; right: 16px; display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: start; pointer-events: none; }
+  .topbar > * { pointer-events: auto; }
+  .brand { display: flex; align-items: center; gap: 12px; padding: 10px 16px 10px 12px; justify-self: start; }
+  .brand svg { flex: none; }
+  .brand .kicker { font-size: 10px; letter-spacing: .2em; color: var(--mars); font-weight: 600; }
+  .brand .title { font-size: 16px; font-weight: 600; letter-spacing: .02em; }
+
+  .compass { position: relative; width: 420px; height: 52px; padding: 0; overflow: hidden; }
+  .compass canvas { display: block; width: 100%; height: 100%; }
+  .compass .needle { position: absolute; left: 50%; top: 0; width: 2px; height: 12px; background: var(--mars); transform: translateX(-50%); }
+
+  .weather-switch { justify-self: end; display: flex; gap: 4px; padding: 5px; }
+  .weather-switch button {
+    display: flex; align-items: center; gap: 7px; padding: 8px 12px; border-radius: 10px; border: 0; background: transparent;
+    color: var(--muted); font-size: 13px; font-weight: 500; transition: background .2s, color .2s;
+  }
+  .weather-switch button:hover { color: var(--text); background: rgba(255,255,255,.06); }
+  .weather-switch button.active { color: var(--text); background: rgba(255,106,61,.22); box-shadow: inset 0 0 0 1px rgba(255,106,61,.5); }
+  .weather-switch kbd { display: none; }
+
+  .telemetry { position: absolute; left: 16px; top: 92px; width: 272px; padding: 14px 16px; }
+  .telemetry .loc { font-size: 19px; font-weight: 600; margin: 4px 0 2px; }
+  .telemetry .coords { font-family: var(--mono); font-size: 12px; color: var(--cyan); }
+  .telemetry .sol { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .telemetry .sol span:last-child { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; margin-top: 14px; }
+  .metric .v { font-family: var(--mono); font-size: 16px; font-weight: 600; margin-top: 2px; }
+  .metric .v small { font-size: 11px; color: var(--muted); font-weight: 400; margin-left: 2px; }
+  .power { margin-top: 14px; }
+  .power .row { display: flex; justify-content: space-between; align-items: baseline; }
+  .bar { height: 6px; border-radius: 6px; background: rgba(255,255,255,.08); overflow: hidden; margin-top: 6px; }
+  .bar > i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--green), #8ef0c4); border-radius: 6px; transition: width .3s; }
+  .bar.low > i { background: linear-gradient(90deg, var(--red), var(--amber)); }
+  .status { margin-top: 12px; display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--green); }
+  .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; animation: pulse 1.6s infinite; }
+  .status.warn { color: var(--amber); }
+  .status.info { color: var(--cyan); }
+  @keyframes pulse { 50% { opacity: .35; } }
+
+  .mission { position: absolute; right: 16px; top: 92px; width: 272px; padding: 14px 16px; }
+  .mission h3 { margin: 4px 0 10px; font-size: 15px; font-weight: 600; display: flex; justify-content: space-between; align-items: baseline; }
+  .mission h3 span { font-family: var(--mono); font-size: 13px; color: var(--mars); }
+  .targets { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .targets li { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); padding: 6px 8px; border-radius: 8px; background: rgba(255,255,255,.03); }
+  .targets li .dot { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--line-strong); flex: none; display: grid; place-items: center; }
+  .targets li.done { color: var(--text); }
+  .targets li.done .dot { background: var(--green); border-color: var(--green); }
+  .targets li.done .dot::after { content: ""; width: 5px; height: 9px; border: solid #04120b; border-width: 0 2px 2px 0; transform: rotate(45deg) translate(-1px,-1px); }
+  .targets li.next { color: var(--text); box-shadow: inset 0 0 0 1px rgba(79,209,255,.35); }
+  .targets li.next .dot { border-color: var(--cyan); }
+  .targets li .d { margin-left: auto; white-space: nowrap; font-family: var(--mono); font-size: 11px; color: var(--cyan); }
+  .mission .hint { margin-top: 10px; font-size: 12px; color: var(--muted); line-height: 1.45; }
+
+  .minimap { position: absolute; left: 16px; bottom: 16px; width: 196px; height: 196px; border-radius: 50%; padding: 6px; }
+  .minimap canvas { width: 100%; height: 100%; border-radius: 50%; display: block; }
+  .minimap .n { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 700; color: var(--mars); }
+
+  .terrain-bar { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 6px; padding: 6px; }
+  .tcard {
+    position: relative; width: 150px; padding: 9px 12px 10px; border-radius: 10px; border: 0; text-align: left; background: rgba(255,255,255,.03);
+    transition: background .2s, box-shadow .2s;
+  }
+  .tcard:hover { background: rgba(255,255,255,.08); }
+  .tcard.active { background: rgba(255,106,61,.18); box-shadow: inset 0 0 0 1px rgba(255,106,61,.55); }
+  .tcard .k { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+  .tcard .nm { font-size: 13.5px; font-weight: 600; margin-top: 2px; white-space: nowrap; }
+  .tcard .tg { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .actions { position: absolute; right: 16px; bottom: 16px; display: flex; gap: 6px; padding: 6px; }
+  .actions button {
+    display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 66px; padding: 8px 8px 7px; border-radius: 10px; border: 0;
+    background: rgba(255,255,255,.03); font-size: 11.5px; color: var(--text); transition: background .2s;
+  }
+  .actions button:hover { background: rgba(255,255,255,.09); }
+  .actions button.active { background: rgba(79,209,255,.18); box-shadow: inset 0 0 0 1px rgba(79,209,255,.5); }
+  .actions kbd, .tcard kbd { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+  .actions svg { width: 20px; height: 20px; }
+
+  .prompt {
+    position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); padding: 10px 16px; display: flex; align-items: center; gap: 12px;
+    font-size: 14px; white-space: nowrap; pointer-events: none;
+  }
+  .prompt kbd { font-family: var(--mono); font-size: 12px; padding: 2px 8px; border-radius: 6px; background: rgba(255,255,255,.12); border: 1px solid var(--line-strong); }
+  .prompt .bar { width: 140px; margin: 0; }
+  .prompt .bar > i { background: linear-gradient(90deg, var(--cyan), #a4e8ff); }
+
+  #toasts { position: absolute; top: 92px; left: 50%; transform: translateX(-50%); display: grid; gap: 8px; width: min(520px, calc(100vw - 32px)); pointer-events: none; }
+  .toast { padding: 12px 16px; animation: toastIn .35s ease-out; border-left: 3px solid var(--cyan); }
+  .toast.ok { border-left-color: var(--green); }
+  .toast.warn { border-left-color: var(--amber); }
+  .toast .t { font-weight: 600; font-size: 14px; }
+  .toast .b { font-size: 13px; color: #c9d2de; margin-top: 3px; line-height: 1.45; }
+  .toast.out { opacity: 0; transform: translateY(-6px); transition: all .4s; }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(-8px); } }
+
+  #storm-overlay {
+    position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 1.5s;
+    background: radial-gradient(ellipse at center, rgba(150,90,50,0) 30%, rgba(110,60,30,.55) 100%);
+  }
+  #vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.45) 100%); }
+
+  /* ---------- Overlays (start / pause) ---------- */
+  .overlay { position: fixed; inset: 0; display: flex; align-items: safe center; justify-content: center; padding: 32px; overflow: auto; }
+  #start-screen { background: linear-gradient(90deg, rgba(5,6,10,.92) 0%, rgba(5,6,10,.72) 45%, rgba(5,6,10,.25) 100%); }
+  .start-wrap { width: min(1180px, 100%); display: grid; grid-template-columns: 1.05fr 1fr; gap: 48px; align-items: center; }
+  .start-kicker { display: flex; align-items: center; gap: 10px; font-size: 12px; letter-spacing: .22em; text-transform: uppercase; color: var(--mars); font-weight: 600; }
+  .start-kicker::before { content: ""; width: 28px; height: 2px; background: var(--mars); }
+  .start-title { font-size: clamp(56px, 9vw, 112px); font-weight: 700; letter-spacing: -.02em; line-height: .95; margin: 18px 0 8px;
+    background: linear-gradient(180deg, #fff 0%, #ffd2bf 55%, #ff7a4d 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .start-sub { font-size: 20px; color: #d7dde6; font-weight: 500; }
+  .start-desc { color: var(--muted); font-size: 15px; line-height: 1.6; max-width: 520px; margin: 18px 0 28px; }
+  .cta { display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn-primary {
+    display: inline-flex; align-items: center; gap: 10px; padding: 14px 26px; border-radius: 12px; border: 0; font-size: 16px; font-weight: 600;
+    background: linear-gradient(135deg, var(--mars), var(--mars-deep)); color: #fff; box-shadow: 0 10px 30px rgba(255,106,61,.35); transition: transform .15s, box-shadow .2s;
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 14px 36px rgba(255,106,61,.5); }
+  .btn-ghost { padding: 14px 22px; border-radius: 12px; border: 1px solid var(--line-strong); background: rgba(255,255,255,.04); font-size: 15px; font-weight: 500; }
+  .btn-ghost:hover { background: rgba(255,255,255,.1); }
+  .facts-row { display: flex; gap: 28px; margin-top: 36px; }
+  .facts-row div { font-size: 12px; color: var(--muted); }
+  .facts-row b { display: block; font-family: var(--mono); font-size: 20px; color: var(--text); font-weight: 600; margin-bottom: 2px; }
+
+  .site-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .site {
+    position: relative; text-align: left; padding: 16px; border-radius: 16px; border: 1px solid var(--line); background: var(--glass); min-height: 168px;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); overflow: hidden; transition: border-color .2s, transform .2s;
+  }
+  .site:hover { transform: translateY(-2px); border-color: var(--line-strong); }
+  .site.active { border-color: var(--mars); box-shadow: 0 0 0 1px var(--mars), 0 12px 32px rgba(255,106,61,.25); }
+  .site .art { position: absolute; inset: 0; opacity: .55; pointer-events: none; }
+  .site > *:not(.art) { position: relative; }
+  .site .k { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .site .nm { font-size: 18px; font-weight: 600; margin: 4px 0 6px; }
+  .site .ds { font-size: 12.5px; color: #c4ccd8; line-height: 1.45; }
+  .site .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .site .tags span { font-size: 10.5px; letter-spacing: .06em; padding: 3px 8px; border-radius: 999px; background: rgba(255,255,255,.08); color: #dfe5ee; }
+  .start-footer { position: fixed; left: 32px; right: 32px; bottom: 18px; display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); pointer-events: none; }
+
+  .modal { width: min(560px, 100%); padding: 28px; }
+  .modal h2 { margin: 6px 0 18px; font-size: 26px; }
+  .keys { display: grid; grid-template-columns: auto 1fr; gap: 10px 16px; align-items: center; font-size: 14px; }
+  .keys kbd { font-family: var(--mono); font-size: 12px; padding: 4px 9px; border-radius: 7px; background: rgba(255,255,255,.08); border: 1px solid var(--line-strong); white-space: nowrap; justify-self: start; }
+  .modal .cta { margin-top: 24px; }
+  #complete-screen { background: rgba(4,6,10,.55); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+  .complete-modal { position: relative; overflow: hidden; text-align: center; width: min(540px, 100%); background: var(--glass-strong); }
+  .complete-modal::before { content: ""; position: absolute; left: 50%; top: -120px; width: 420px; height: 260px; transform: translateX(-50%);
+    background: radial-gradient(ellipse at center, rgba(61,220,151,.28), transparent 70%); pointer-events: none; }
+  .complete-modal > * { position: relative; }
+  .mc-badge { width: 86px; height: 86px; margin: 6px auto 16px; border-radius: 50%; display: grid; place-items: center;
+    background: radial-gradient(circle at 35% 30%, #8ef5c8, #1f9e68); box-shadow: 0 0 0 8px rgba(61,220,151,.14), 0 0 44px rgba(61,220,151,.55);
+    animation: mcPop .6s cubic-bezier(.2,1.6,.4,1) both; }
+  .mc-badge svg { width: 44px; height: 44px; fill: none; stroke: #04120b; stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round;
+    stroke-dasharray: 40; stroke-dashoffset: 40; animation: mcDraw .45s .35s ease-out forwards; }
+  .complete-modal .label { color: var(--green); }
+  #mc-title { margin: 8px 0 10px; font-size: 30px; line-height: 1.15; }
+  #mc-body { color: #c9d2de; line-height: 1.55; margin: 0 0 22px; font-size: 15px; }
+  .mc-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 24px; }
+  .mc-stats div { background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 12px; padding: 10px 8px; }
+  .mc-stats b { display: block; font-family: var(--mono); font-size: 19px; margin-top: 4px; }
+  .complete-modal .cta { flex-direction: column; margin-top: 0; }
+  .complete-modal .cta .btn-primary { justify-content: center; }
+  .mc-row { display: flex; gap: 8px; } .mc-row button { flex: 1; padding: 12px 10px; font-size: 14px; }
+  #mc-confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .confetti { position: absolute; top: -16px; width: 8px; height: 14px; border-radius: 2px; animation: mcFall 2.6s ease-in forwards; }
+  @keyframes mcPop { from { transform: scale(.3); opacity: 0; } }
+  @keyframes mcDraw { to { stroke-dashoffset: 0; } }
+  @keyframes mcFall { to { transform: translateY(640px) rotate(600deg); opacity: 0; } }
+  @media (max-height: 720px) {
+    .complete-modal { padding: 20px 24px; }
+    .mc-badge { width: 64px; height: 64px; margin: 0 auto 10px; } .mc-badge svg { width: 34px; height: 34px; }
+    #mc-title { font-size: 25px; margin: 4px 0 6px; } #mc-body { margin-bottom: 14px; } .mc-stats { margin-bottom: 16px; }
+    .complete-modal .cta { gap: 8px; } .complete-modal .cta button { padding-top: 10px; padding-bottom: 10px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .mc-badge, .mc-badge svg { animation: none; stroke-dashoffset: 0; } }
+  #pause-screen, #help-screen { background: rgba(4,6,10,.6); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+
+  .lang-switch, .seg { display: inline-flex; gap: 2px; padding: 4px; border-radius: 12px; background: rgba(255,255,255,.04); }
+  .lang-switch button, .seg button { border: 0; background: transparent; color: var(--muted); font-size: 13px; font-weight: 600; padding: 7px 12px; border-radius: 9px; transition: background .2s, color .2s; }
+  .lang-switch button:hover, .seg button:hover { color: var(--text); }
+  .lang-switch button.active, .seg button.active { color: var(--text); background: rgba(255,106,61,.22); box-shadow: inset 0 0 0 1px rgba(255,106,61,.5); }
+  .lang-fixed { position: fixed; top: 20px; right: 24px; z-index: 5; }
+  #start-screen { padding-top: 76px; }
+  @media (max-height: 760px) { .start-footer { display: none; } }
+  .seg-sm button { font-size: 12px; padding: 6px 8px; }
+  .mission .seg { display: flex; width: 100%; margin-bottom: 6px; }
+  .mission .seg button { flex: 1; }
+  .mission-pick { margin-bottom: 22px; }
+  .targets li .nm2 { display: flex; flex-direction: column; min-width: 0; }
+  .targets li .sub { font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+  .targets li .dot { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--muted); }
+  .mission.route .targets li.next { box-shadow: inset 0 0 0 1px rgba(255,181,71,.55); }
+  .mission.route .targets li.next .dot { border-color: var(--amber); color: var(--amber); }
+  .mission.route h3 span:last-child { color: var(--amber); }
+  .lang-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: -6px 0 18px; }
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg); z-index: 50; transition: opacity .5s; }
+  #loading .ring { width: 54px; height: 54px; border-radius: 50%; border: 3px solid rgba(255,255,255,.1); border-top-color: var(--mars); animation: spin 1s linear infinite; margin: 0 auto 16px; }
+  #loading p { color: var(--muted); font-size: 14px; letter-spacing: .1em; text-transform: uppercase; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 1100px) {
+    .compass { width: 300px; }
+    .weather-switch button span { display: none; }
+    .mission { display: none; }
+    .tcard { width: 118px; } .tcard .tg { display: none; }
+  }
+  @media (max-height: 780px) { .minimap { display: none; } }
+  @media (max-width: 860px) {
+    .start-wrap { grid-template-columns: 1fr; gap: 28px; }
+    #start-screen { align-items: flex-start; background: rgba(5,6,10,.82); }
+    .start-footer { display: none; }
+    .topbar { grid-template-columns: 1fr auto; }
+    .compass, .telemetry, .minimap { display: none; }
+    .terrain-bar { left: 16px; transform: none; bottom: 84px; }
+    .actions { bottom: 16px; }
+  }
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<canvas id="scene" tabindex="0" aria-label="3D view of the surface of Mars" data-i18n-aria="canvasAria"></canvas>
+<div id="vignette"></div>
+<div id="storm-overlay"></div>
+
+<!-- ======================= HUD ======================= -->
+<div id="hud" class="hidden">
+  <div class="topbar">
+    <div class="brand panel">
+      <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true">
+        <defs><radialGradient id="mg" cx="35%" cy="30%"><stop offset="0" stop-color="#ffb08a"/><stop offset=".6" stop-color="#d4552b"/><stop offset="1" stop-color="#6e2410"/></radialGradient></defs>
+        <circle cx="17" cy="17" r="12" fill="url(#mg)"/>
+        <ellipse cx="17" cy="17" rx="16" ry="5" fill="none" stroke="#4fd1ff" stroke-width="1.2" transform="rotate(-20 17 17)" opacity=".85"/>
+      </svg>
+      <div>
+        <div class="kicker">NASA SPACE APPS CHALLENGE</div>
+        <div class="title" data-i18n="title">Mars · Terrain Simulator</div>
+      </div>
+    </div>
+    <div class="compass panel"><canvas id="compass" width="840" height="104"></canvas><div class="needle"></div></div>
+    <div class="weather-switch panel" id="weather-switch" role="group" aria-label="Weather" data-i18n-aria="weather"></div>
+  </div>
+
+  <aside class="telemetry panel" aria-label="Rover telemetry" data-i18n-aria="telemetryAria">
+    <div class="sol"><span class="label" data-i18n="telemetry">Telemetry</span><span id="t-sol">SOL 1 · 10:00 LMST</span></div>
+    <div class="label" data-i18n="location">Location</div>
+    <div class="loc" id="t-loc">—</div>
+    <div class="coords" id="t-coords">—</div>
+    <div class="grid2">
+      <div class="metric"><div class="label" data-i18n="elevation">Elevation</div><div class="v" id="t-elev">0<small>m</small></div></div>
+      <div class="metric"><div class="label" data-i18n="speed">Speed</div><div class="v" id="t-speed">0.0<small>m/s</small></div></div>
+      <div class="metric"><div class="label" data-i18n="tilt">Tilt</div><div class="v" id="t-tilt">0<small>°</small></div></div>
+      <div class="metric"><div class="label" data-i18n="temperature">Temperature</div><div class="v" id="t-temp">-20<small>°C</small></div></div>
+      <div class="metric"><div class="label" data-i18n="gravity">Gravity</div><div class="v">3.71<small>m/s²</small></div></div>
+      <div class="metric"><div class="label" data-i18n="distance">Distance</div><div class="v" id="t-dist">0<small>m</small></div></div>
+    </div>
+    <div class="power">
+      <div class="row"><span class="label" data-i18n="power">Power · solar panels</span><span class="mono" id="t-power-v">100%</span></div>
+      <div class="bar" id="t-power"><i></i></div>
+    </div>
+    <div class="status" id="t-status">All systems nominal</div>
+  </aside>
+
+  <aside class="mission panel" aria-label="Mission objectives" data-i18n-aria="missionAria">
+    <div class="seg seg-sm" data-mission-switch role="group" aria-label="Mission" data-i18n-aria="mission"></div>
+    <h3><span id="m-site">—</span><span id="m-count">0/5</span></h3>
+    <ul class="targets" id="m-list"></ul>
+    <div class="hint" id="m-hint">Drive to the beacons and stop next to them to analyze the samples.</div>
+  </aside>
+
+  <div class="minimap panel"><canvas id="minimap" width="368" height="368"></canvas><div class="n">N</div></div>
+
+  <nav class="terrain-bar panel" id="terrain-bar" aria-label="Terrains" data-i18n-aria="terrainsAria"></nav>
+
+  <div class="actions panel">
+    <button id="btn-tunnels" title="Underground tunnels (T)" data-i18n-title="tunnelsTitle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 20V12a9 9 0 0 1 18 0v8"/><path d="M7 20v-7a5 5 0 0 1 10 0v7"/><path d="M2 20h20"/></svg>
+      <span data-i18n="tunnels">Tunnels</span> <kbd>T</kbd></button>
+    <button id="btn-weather" title="Next weather (C)" data-i18n-title="weatherTitle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7 18h10a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.1 10.1 4 4 0 0 0 7 18z"/></svg>
+      <span data-i18n="weather">Weather</span> <kbd>C</kbd></button>
+    <button id="btn-reset" title="Reset terrain (R)" data-i18n-title="resetTitle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+      <span data-i18n="reset">Reset</span> <kbd>R</kbd></button>
+    <button id="btn-pause" title="Pause (ESC)" data-i18n-title="pauseTitle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+      <span data-i18n="menu">Menu</span> <kbd>ESC</kbd></button>
+    <button id="btn-lang" title="Language / Idioma (L)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+      <span id="lang-code">EN</span> <kbd>L</kbd></button>
+  </div>
+
+  <div class="prompt panel hidden" id="prompt"></div>
+  <div id="toasts"></div>
+</div>
+
+<!-- ======================= START ======================= -->
+<section class="overlay" id="start-screen">
+  <div class="lang-switch panel lang-fixed" data-lang-switch role="group" aria-label="Language / Idioma"></div>
+  <div class="start-wrap">
+    <div>
+      <div class="start-kicker">NASA International Space Apps Challenge</div>
+      <h1 class="start-title" data-i18n="startTitle">MARS</h1>
+      <div class="start-sub" data-i18n="startSub">Terrain exploration simulator</div>
+      <p class="start-desc" data-i18n="startDesc">Take control of a rover and explore four real regions of the Red Planet. Cross canyons, craters, ice caps and the tallest volcano in the solar system, analyze science samples and uncover a network of underground tunnels.</p>
+      <div class="cta">
+        <button class="btn-primary" id="btn-start">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          <span data-i18n="startMission">Start mission</span></button>
+        <button class="btn-ghost" id="btn-help-start" data-i18n="controls">Controls</button>
+      </div>
+      <div class="facts-row">
+        <div><b data-i18n="gravityVal">3.71 m/s²</b><span data-i18n="surfaceGravity">Surface gravity</span></div>
+        <div><b>-63 °C</b><span data-i18n="avgTemp">Average temperature</span></div>
+        <div><b>24 h 37 min</b><span data-i18n="solLength">Length of a sol</span></div>
+      </div>
+    </div>
+    <div>
+      <div class="label" style="margin-bottom:10px" data-i18n="chooseMission">Choose your mission</div>
+      <div class="seg mission-pick" data-mission-switch role="group" aria-label="Mission" data-i18n-aria="mission"></div>
+      <div class="label" style="margin-bottom:12px" data-i18n="chooseSite">Choose your landing site</div>
+      <div class="site-grid" id="site-grid"></div>
+    </div>
+  </div>
+  <div class="start-footer"><span data-i18n="team">Team Isabelinos Espaciales</span><span data-i18n="dataCredit">Science facts based on public NASA information</span></div>
+</section>
+
+<!-- ======================= PAUSE ======================= -->
+<section class="overlay hidden" id="pause-screen">
+  <div class="modal panel" style="background:var(--glass-strong)">
+    <div class="label" data-i18n="paused">Mission paused</div>
+    <h2 id="pause-site">—</h2>
+    <div class="lang-row"><span class="label" data-i18n="language">Language</span><div class="lang-switch" data-lang-switch role="group" aria-label="Language / Idioma"></div></div>
+    <div class="lang-row"><span class="label" data-i18n="mission">Mission</span><div class="seg" data-mission-switch role="group" aria-label="Mission" data-i18n-aria="mission"></div></div>
+    <div class="cta" style="flex-direction:column">
+      <button class="btn-primary" id="btn-resume" style="justify-content:center" data-i18n="resume">Resume</button>
+      <button class="btn-ghost" id="btn-help-pause" data-i18n="controls">Controls</button>
+      <button class="btn-ghost" id="btn-restart" data-i18n="restart">Restart terrain</button>
+      <button class="btn-ghost" id="btn-menu" data-i18n="backMenu">Back to main menu</button>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= HELP ======================= -->
+<section class="overlay hidden" id="help-screen">
+  <div class="modal panel" style="background:var(--glass-strong)">
+    <div class="label" data-i18n="manual">Rover manual</div>
+    <h2 data-i18n="controls">Controls</h2>
+    <div class="keys">
+      <kbd>W A S D</kbd><span data-i18n="k_drive">Drive the rover (arrow keys also work)</span>
+      <kbd data-i18n="kbdSpace">SPACE</kbd><span data-i18n="k_jump">Jump</span>
+      <kbd data-i18n="kbdDrag">Right-click + drag</kbd><span data-i18n="k_orbit">Orbit the camera (left-click works too)</span>
+      <kbd data-i18n="kbdWheel">Wheel</kbd><span data-i18n="k_zoom">Zoom</span>
+      <kbd>1-4 · F1-F4</kbd><span data-i18n="k_terrain">Change terrain</span>
+      <kbd>C</kbd><span data-i18n="k_weather">Cycle weather: clear, dust storm, sunset, night</span>
+      <kbd>T</kbd><span data-i18n="k_tunnels">Show / hide the underground tunnels</span>
+      <kbd>E</kbd><span data-i18n="k_enter">Enter / exit the tunnels (at the access shaft)</span>
+      <kbd>R</kbd><span data-i18n="k_reset">Reset the terrain</span>
+      <kbd>ESC</kbd><span data-i18n="k_pause">Pause / menu</span>
+      <kbd>L</kbd><span data-i18n="k_lang">Switch language (Español / English)</span>
+      <kbd>M</kbd><span data-i18n="k_mission">Switch mission (samples / Perseverance route)</span>
+    </div>
+    <div class="cta"><button class="btn-primary" id="btn-help-close" data-i18n="gotIt">Got it</button></div>
+  </div>
+</section>
+
+<!-- ======================= MISSION COMPLETE ======================= -->
+<section class="overlay hidden" id="complete-screen" role="dialog" aria-modal="true" aria-labelledby="mc-title">
+  <div class="modal panel complete-modal">
+    <div id="mc-confetti" aria-hidden="true"></div>
+    <div class="mc-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+    <div class="label" id="mc-kicker">—</div>
+    <h2 id="mc-title" data-i18n="mcTitle">Mission Complete — Successful!</h2>
+    <p id="mc-body"></p>
+    <div class="mc-stats">
+      <div><span class="label" id="mc-s1-l">Samples</span><b id="mc-s1">5/5</b></div>
+      <div><span class="label" data-i18n="mcDistance">Distance</span><b id="mc-s2">0 m</b></div>
+      <div><span class="label" data-i18n="mcTime">Mission time</span><b id="mc-s3">0:00</b></div>
+    </div>
+    <div class="cta">
+      <button class="btn-primary" id="btn-mc-continue" data-i18n="mcContinue">Keep exploring</button>
+      <div class="mc-row">
+        <button class="btn-ghost" id="btn-mc-next">Next site</button>
+        <button class="btn-ghost" id="btn-mc-switch">Switch mission</button>
+      </div>
+      <button class="btn-ghost" id="btn-mc-menu" data-i18n="mcMenu">Main menu</button>
+    </div>
+  </div>
+</section>
+
+<div id="loading"><div><div class="ring"></div><p id="loading-text">Preparing mission…</p></div></div>
+
+<script type="module">
+import * as THREE from 'three';
+
+// =====================================================================
+// MARS · TERRAIN SIMULATOR (web version)
+// Based on a-marte.py: same terrains, procedural generation, rover,
+// weather, tunnels and controls; modern rendering with Three.js.
+// =====================================================================
+
+// ---------- Utilities ----------
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const srgb = (r, g, b) => new THREE.Color().setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace);
+const damp = (k, dt) => 1 - Math.exp(-k * dt);
+function lerpAngle(a, b, t) { let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI; if (d < -Math.PI) d += Math.PI * 2; return a + d * t; }
+
+// random.seed(42) from the original: a single global generator for the craters
+const rng = mulberry32(42);
+const randint = (a, b) => a + Math.floor(rng() * (b - a + 1));
+const uniform = (a, b) => a + rng() * (b - a);
+
+// Value noise (fine terrain detail and textures)
+function makeNoise(seed) {
+  const r = mulberry32(seed);
+  const perm = new Uint16Array(512), p = [...Array(256).keys()];
+  for (let i = 255; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; }
+  for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
+  const val = new Float32Array(256).map(() => r() * 2 - 1);
+  const h = (x, y, P) => { if (P) { x = ((x % P) + P) % P; y = ((y % P) + P) % P; } return val[perm[(x & 255) + perm[y & 255]]]; };
+  function noise(x, y, P = 0) {
+    const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy;
+    const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+    const a = h(ix, iy, P), b = h(ix + 1, iy, P), c = h(ix, iy + 1, P), d = h(ix + 1, iy + 1, P);
+    return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
+  }
+  function fbm(x, y, oct = 4, P = 0) {
+    let s = 0, amp = 0.5, f = 1;
+    for (let i = 0; i < oct; i++) { s += amp * noise(x * f, y * f, P ? P * f : 0); amp *= 0.5; f *= 2; }
+    return s;
+  }
+  return { noise, fbm };
+}
+const detail = makeNoise(7);
+
+// =====================================================================
+// RENDERER / SCENE
+// =====================================================================
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.35;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1200);
+camera.position.set(0, 25, -60);
+
+const S = 3;            // 1 original map unit = 3 m in the world
+const MAP = 80;         // size=80 from the original
+const W = MAP * S;      // 240 m per side
+const HALF = W / 2;
+const SEG = 240;        // mesh resolution
+const EDGE = HALF - 4;  // driving boundary
+
+// Lights
+const sun = new THREE.DirectionalLight(0xffffff, 2.5);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -55, right: 55, top: 55, bottom: -55, near: 1, far: 400 });
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.04;
+scene.add(sun, sun.target);
+const hemi = new THREE.HemisphereLight(0xffd9b8, 0x5a2a16, 0.8);
+scene.add(hemi);
+scene.fog = new THREE.FogExp2(0xdcb496, 0.003);
+
+// ---------- Sky (gradient + sun) ----------
+const skyUniforms = {
+  topColor: { value: new THREE.Color() }, horizonColor: { value: new THREE.Color() },
+  glowColor: { value: new THREE.Color() }, sunColor: { value: new THREE.Color() },
+  sunDir: { value: new THREE.Vector3(0, 1, 0) }, glowPower: { value: 6 }, sunDisc: { value: 1 },
+};
+const sky = new THREE.Mesh(
+  new THREE.SphereGeometry(900, 48, 24),
+  new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, fog: false, uniforms: skyUniforms,
+    vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `
+      uniform vec3 topColor, horizonColor, glowColor, sunColor, sunDir; uniform float glowPower, sunDisc;
+      varying vec3 vDir;
+      void main(){
+        vec3 d = normalize(vDir);
+        float h = d.y;
+        vec3 col = mix(horizonColor, topColor, smoothstep(-0.02, 0.55, h));
+        col = mix(col, horizonColor * 0.55, smoothstep(0.0, -0.25, h));
+        float s = max(dot(d, normalize(sunDir)), 0.0);
+        col += glowColor * pow(s, glowPower) * 0.9;
+        col += sunColor * smoothstep(0.9993, 0.9997, s) * 3.0 * sunDisc;
+        gl_FragColor = vec4(col, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+  })
+);
+scene.add(sky);
+
+// ---------- Stars, Phobos and Deimos ----------
+const stars = (() => {
+  const r = mulberry32(99), n = 2600, pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const u = r() * Math.PI * 2, v = Math.acos(1 - r() * 1.05);
+    pos.set([Math.sin(v) * Math.cos(u) * 850, Math.cos(v) * 850, Math.sin(v) * Math.sin(u) * 850], i * 3);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const m = new THREE.PointsMaterial({ size: 1.6, sizeAttenuation: false, color: 0xffffff, transparent: true, opacity: 0, fog: false, depthWrite: false });
+  return new THREE.Points(g, m);
+})();
+scene.add(stars);
+const moons = new THREE.Group();
+for (const [r, dir] of [[9, [0.5, 0.45, 0.6]], [4, [-0.6, 0.6, 0.35]]]) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 16), new THREE.MeshBasicMaterial({ color: 0xb9ada0, transparent: true, opacity: 0, fog: false }));
+  m.position.set(...dir).normalize().multiplyScalar(820); moons.add(m);
+}
+scene.add(moons);
+
+// ---------- Airborne dust ----------
+const DUST_MAX = 7000;
+const dust = (() => {
+  const r = mulberry32(5), pos = new Float32Array(DUST_MAX * 3);
+  for (let i = 0; i < DUST_MAX; i++) pos.set([(r() - .5) * 140, r() * 40, (r() - .5) * 140], i * 3);
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const c = document.createElement('canvas'); c.width = c.height = 32;
+  const x = c.getContext('2d'); const gr = x.createRadialGradient(16, 16, 0, 16, 16, 16);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = gr; x.fillRect(0, 0, 32, 32);
+  const m = new THREE.PointsMaterial({ size: 0.35, map: new THREE.CanvasTexture(c), transparent: true, opacity: 0.4, depthWrite: false, color: 0xd9a77f });
+  const p = new THREE.Points(g, m); p.frustumCulled = false; return p;
+})();
+scene.add(dust);
+
+// ---------- Procedural regolith texture (grain + pebbles) ----------
+function makeRegolithTexture() {
+  const N = 512, c = document.createElement('canvas'); c.width = c.height = N;
+  const ctx = c.getContext('2d'), img = ctx.createImageData(N, N), nz = makeNoise(11), r = mulberry32(3);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const v = 0.5 * nz.fbm(x / 64, y / 64, 4, 8) + 0.35 * nz.fbm(x / 8, y / 8, 2, 64) + (r() - .5) * 0.18;
+    const g = clamp(232 + v * 55, 0, 255), i = (y * N + x) * 4;
+    img.data[i] = g; img.data[i + 1] = g * 0.97; img.data[i + 2] = g * 0.94; img.data[i + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  for (let k = 0; k < 900; k++) {        // small pebbles
+    const x = r() * N, y = r() * N, rad = 0.8 + r() ** 3 * 5;
+    for (const [ox, oy] of [[0, 0], [N, 0], [-N, 0], [0, N], [0, -N]]) {
+      ctx.beginPath(); ctx.arc(x + ox, y + oy, rad, 0, Math.PI * 2);
+      ctx.fillStyle = r() > .5 ? 'rgba(60,40,30,.35)' : 'rgba(255,240,225,.25)'; ctx.fill();
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(36, 36);
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+const regolith = makeRegolithTexture();
+
+// =====================================================================
+// TERRAIN GENERATOR (same rules as the original TerrainGenerator)
+// =====================================================================
+class TerrainGenerator {
+  constructor(name, { size = 80, height_scale = 6, roughness = 0.6, color_base = [150, 70, 40],
+                      crater_density = 5, has_ice = false, has_canyon = false, has_dunes = false } = {}) {
+    Object.assign(this, { name, size, height_scale, roughness, color_base, crater_density, has_ice, has_canyon, has_dunes });
+    this.craters = [];
+    this.grid = null;
+    this.group = new THREE.Group();
+  }
+
+  // Original fractal noise
+  noise2d(x, y) {
+    let n = 0, amp = 1, freq = 0.06;
+    for (let i = 0; i < 4; i++) {
+      n += amp * Math.sin(x * freq + Math.cos(y * freq * 1.3));
+      n += amp * Math.cos(y * freq + Math.sin(x * freq * 1.1));
+      amp *= this.roughness; freq *= 2.1;
+    }
+    return n;
+  }
+
+  // Height in original map coordinates (u, v in [0, size])
+  heightMap(u, v) {
+    let h = this.noise2d(u, v) * this.height_scale;
+    for (const c of this.craters) {                 // craters with raised rims
+      const d = Math.hypot(u - c.cx, v - c.cy);
+      if (d < c.r) h -= c.depth * (1 - (d / c.r) ** 2);
+      else if (d < c.r * 1.6) h += c.depth * 0.22 * (1 - smoothstep(c.r, c.r * 1.6, d)) * smoothstep(c.r * 0.9, c.r * 1.1, d);
+    }
+    if (this.has_canyon) {                          // central canyon (mid-4 .. mid+4)
+      const mid = this.size / 2;
+      const w = smoothstep(mid - 5.5, mid - 3.5, v) * (1 - smoothstep(mid + 3.5, mid + 5.5, v));
+      h -= (8 + 6 * Math.sin(u * 0.15)) * w;
+    }
+    if (this.has_dunes) h += 3 * Math.sin(u * 0.25) * Math.cos(v * 0.2);
+    h += detail.fbm(u * 0.35, v * 0.35, 5) * 1.6 + detail.fbm(u * 2.2, v * 2.2, 3) * 0.25;   // micro-relief
+    return h;
+  }
+
+  generate() {
+    for (let i = 0; i < this.crater_density; i++) {
+      const cx = randint(6, this.size - 6), cy = randint(6, this.size - 6), r = randint(3, 7);
+      this.craters.push({ cx, cy, r, depth: uniform(3, 6) });
+    }
+    const N = SEG + 1, grid = new Float32Array(N * N);
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++)
+      grid[j * N + i] = this.heightMap((i / SEG) * this.size, (j / SEG) * this.size);
+    this.grid = grid;
+    this.buildMesh();
+    this.buildRocks();
+    return this;
+  }
+
+  heightAt(x, z) {
+    const N = SEG + 1;
+    const fx = clamp((x + HALF) / W * SEG, 0, SEG - 1e-4), fz = clamp((z + HALF) / W * SEG, 0, SEG - 1e-4);
+    const i = Math.floor(fx), j = Math.floor(fz), tx = fx - i, tz = fz - j, g = this.grid;
+    const a = g[j * N + i], b = g[j * N + i + 1], c = g[(j + 1) * N + i], d = g[(j + 1) * N + i + 1];
+    return lerp(lerp(a, b, tx), lerp(c, d, tx), tz);
+  }
+
+  normalAt(x, z, e = 1.2) {
+    return new THREE.Vector3(this.heightAt(x - e, z) - this.heightAt(x + e, z), 2 * e, this.heightAt(x, z - e) - this.heightAt(x, z + e)).normalize();
+  }
+
+  buildMesh() {
+    const geo = new THREE.PlaneGeometry(W, W, SEG, SEG);
+    geo.rotateX(-Math.PI / 2);
+    const pos = geo.attributes.position;
+    for (let k = 0; k < pos.count; k++) pos.setY(k, this.grid[k]);
+    geo.computeVertexNormals();
+
+    // Per-vertex colors: same base as the original (color_base * (0.6 + 0.5 t)) + realism
+    const nrm = geo.attributes.normal, col = new Float32Array(pos.count * 3), hs = this.height_scale, c = new THREE.Color();
+    const [br, bg, bb] = this.color_base.map(v => v / 255);
+    for (let k = 0; k < pos.count; k++) {
+      const x = pos.getX(k), z = pos.getZ(k), h = pos.getY(k), ny = nrm.getY(k);
+      const u = (x + HALF) / S, v = (z + HALF) / S;
+      const t = clamp((h + hs) / (2 * hs), 0, 1);
+      const var1 = 1 + 0.14 * detail.fbm(u * 0.5 + 40, v * 0.5, 3) + 0.06 * detail.noise(u * 4, v * 4);
+      let r = br * (0.6 + 0.5 * t) * var1, g = bg * (0.6 + 0.5 * t) * var1, b = bb * (0.6 + 0.5 * t) * var1;
+      const slope = smoothstep(0.12, 0.5, 1 - ny);          // slopes: dark basaltic rock
+      r = lerp(r, r * 0.55, slope); g = lerp(g, g * 0.5, slope); b = lerp(b, b * 0.52, slope);
+      const flat = smoothstep(0.96, 0.995, ny) * 0.25;        // flats: lighter fine dust
+      r = lerp(r, Math.min(1, r * 1.25 + 0.04), flat); g = lerp(g, g * 1.2 + 0.02, flat); b = lerp(b, b * 1.12, flat);
+      if (this.has_ice) {                                     // ice / CO2 above h > 0.55 * height_scale
+        const ice = smoothstep(hs * 0.5, hs * 0.6, h + detail.noise(u * 0.8, v * 0.8) * hs * 0.08) * (0.55 + 0.45 * ny);
+        r = lerp(r, 0.88, ice); g = lerp(g, 0.91, ice); b = lerp(b, 0.96, ice);
+      }
+      c.setRGB(clamp(r, 0, 1), clamp(g, 0, 1), clamp(b, 0, 1), THREE.SRGBColorSpace);
+      col.set([c.r, c.g, c.b], k * 3);
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+
+    this.material = new THREE.MeshStandardMaterial({
+      vertexColors: true, map: regolith, bumpMap: regolith, bumpScale: 1.2, roughness: 0.96, metalness: 0,
+    });
+    this.mesh = new THREE.Mesh(geo, this.material);
+    this.mesh.receiveShadow = true; this.mesh.castShadow = true;
+    this.group.add(this.mesh);
+  }
+
+  buildRocks() {
+    const r = mulberry32(this.name.length * 131 + this.crater_density);
+    const base = new THREE.IcosahedronGeometry(1, 1), p = base.attributes.position;
+    for (let i = 0; i < p.count; i++) { const k = 0.75 + r() * 0.5; p.setXYZ(i, p.getX(i) * k, p.getY(i) * k * 0.7, p.getZ(i) * k); }
+    base.computeVertexNormals();
+    const n = 900;
+    const mat = new THREE.MeshStandardMaterial({ color: this.has_ice ? 0x6d5a4e : 0x5b3323, roughness: 0.92, flatShading: true });
+    const rocks = new THREE.InstancedMesh(base, mat, n);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), t = new THREE.Vector3(), cc = new THREE.Color();
+    for (let i = 0; i < n; i++) {
+      const x = (r() - .5) * (W - 8), z = (r() - .5) * (W - 8), sc = 0.12 + r() ** 4 * 1.6;
+      e.set(r() * 6, r() * 6, r() * 6); q.setFromEuler(e);
+      s.set(sc * (0.8 + r() * .6), sc, sc * (0.8 + r() * .6));
+      t.set(x, this.heightAt(x, z) - sc * 0.25, z);
+      m.compose(t, q, s); rocks.setMatrixAt(i, m);
+      rocks.setColorAt(i, cc.setHSL(0.04 + r() * 0.03, 0.35 + r() * 0.2, 0.18 + r() * 0.2));
+    }
+    rocks.castShadow = true; rocks.receiveShadow = true;
+    this.rocks = rocks;
+    this.group.add(rocks);
+  }
+
+  setXray(on) {
+    this.material.transparent = on; this.material.opacity = on ? 0.22 : 1; this.material.depthWrite = !on;
+    this.material.needsUpdate = true; this.rocks.visible = !on;
+  }
+
+  destroy() {
+    scene.remove(this.group);
+    this.mesh.geometry.dispose(); this.material.dispose();
+    this.rocks.geometry.dispose(); this.rocks.material.dispose();
+  }
+}
+
+// =====================================================================
+// UNDERGROUND TUNNELS (original segments, depth -12)
+// =====================================================================
+class UndergroundTunnel {
+  constructor() { this.group = new THREE.Group(); this.rects = []; this.lights = []; }
+
+  box(mat, x, y, z, sx, sy, sz) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+    m.position.set(x, y, z); m.receiveShadow = true; this.group.add(m); return m;
+  }
+
+  build(depth = -12, surfaceAt) {
+    this.depth = depth;
+    this.floorY = depth - 1.5;                 // drivable floor
+    const ceilY = depth + 2;
+    const rock = new THREE.MeshStandardMaterial({ color: srgb(110, 55, 30), roughness: 1, map: regolith });
+    const floor = new THREE.MeshStandardMaterial({ color: srgb(90, 45, 25), roughness: 1, map: regolith });
+    const roof = new THREE.MeshStandardMaterial({ color: srgb(70, 35, 20), roughness: 1, transparent: true, opacity: 0.3, depthWrite: false });
+    const strip = new THREE.MeshStandardMaterial({ color: 0xffd7a0, emissive: 0xffa040, emissiveIntensity: 2.5 });
+
+    // Original segments (x, y, z, sx, sy, sz) in map units + central connector (H shape)
+    const segments = [
+      [-30, depth, 0, 40, 2, 4],
+      [0, depth, 0, 2, 2, 40],
+      [30, depth, 0, 40, 2, 4],
+      [0, depth, -18, 2, 2, 40],
+      [0, depth, 0, 20, 2, 4],
+    ];
+    const lim = EDGE / S;
+    for (const [sx0, , sz0, w0, , d0] of segments) {
+      // Clip to the terrain size
+      let x1 = Math.max(sx0 - w0 / 2, -lim), x2 = Math.min(sx0 + w0 / 2, lim);
+      let z1 = Math.max(sz0 - d0 / 2, -lim), z2 = Math.min(sz0 + d0 / 2, lim);
+      const cx = (x1 + x2) / 2 * S, cz = (z1 + z2) / 2 * S, w = (x2 - x1) * S, d = (z2 - z1) * S;
+      const H = ceilY - this.floorY;
+      this.box(floor, cx, this.floorY - 0.5, cz, w, 1, d);
+      this.box(roof, cx, ceilY + 0.5, cz, w, 1, d);
+      if (w >= d) {
+        this.box(rock, cx, this.floorY + H / 2, cz - d / 2, w, H, 0.6);
+        this.box(rock, cx, this.floorY + H / 2, cz + d / 2, w, H, 0.6);
+        this.box(strip, cx, ceilY - 0.05, cz, w * 0.96, 0.08, 0.25);
+      } else {
+        this.box(rock, cx - w / 2, this.floorY + H / 2, cz, 0.6, H, d);
+        this.box(rock, cx + w / 2, this.floorY + H / 2, cz, 0.6, H, d);
+        this.box(strip, cx, ceilY - 0.05, cz, 0.25, 0.08, d * 0.96);
+      }
+      this.rects.push({ x1: x1 * S + 1.4, x2: x2 * S - 1.4, z1: z1 * S + 1.4, z2: z2 * S - 1.4 });
+    }
+
+    // Emergency lights (every 15 units, as in the original)
+    for (let i = -30; i < 35; i += 15) {
+      const x = i * S, y = depth + 1;
+      const s = new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 12), new THREE.MeshStandardMaterial({ color: 0xffb450, emissive: 0xff9632, emissiveIntensity: 3 }));
+      s.position.set(x, y, 0);
+      const pl = new THREE.PointLight(0xff9a40, 40, 28, 2); pl.position.set(x, y, 0);
+      this.group.add(s, pl);
+    }
+
+    // Access shaft (original entry point at z = 22)
+    const shaftZ = 21 * S, half = 4;
+    const top = surfaceAt(0, shaftZ) + 1.5, bottom = this.floorY;
+    const hh = top - bottom;
+    const shaftMat = new THREE.MeshStandardMaterial({ color: srgb(60, 30, 15), roughness: 1, side: THREE.DoubleSide });
+    this.box(shaftMat, -half, bottom + hh / 2, shaftZ, 0.5, hh, half * 2);
+    this.box(shaftMat, half, bottom + hh / 2, shaftZ, 0.5, hh, half * 2);
+    this.box(shaftMat, 0, bottom + hh / 2, shaftZ + half, half * 2, hh, 0.5);
+    this.box(floor, 0, bottom - 0.5, shaftZ, half * 2, 1, half * 2);
+    // Surface beacon
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(half, 0.18, 12, 48), new THREE.MeshStandardMaterial({ color: 0x4fd1ff, emissive: 0x4fd1ff, emissiveIntensity: 2 }));
+    ring.rotation.x = Math.PI / 2; ring.position.set(0, top - 1.2, shaftZ);
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(half * 0.9, half * 0.9, 40, 32, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0x4fd1ff, transparent: true, opacity: 0.08, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+    beam.position.set(0, top + 18, shaftZ);
+    this.group.add(ring, beam);
+    this.shaft = { x1: -half + 1, x2: half - 1, z1: shaftZ - half + 1, z2: shaftZ + half - 1, cx: 0, cz: shaftZ };
+    this.rects.push({ x1: this.shaft.x1, x2: this.shaft.x2, z1: shaftZ - 3 * half, z2: this.shaft.z2 });
+
+    scene.add(this.group);
+    return this;
+  }
+
+  inside(x, z) { return this.rects.some(r => x >= r.x1 && x <= r.x2 && z >= r.z1 && z <= r.z2); }
+  inShaft(x, z) { const s = this.shaft; return x >= s.x1 - 1 && x <= s.x2 + 1 && z >= s.z1 - 1 && z <= s.z2 + 1; }
+  setEnabled(v) { this.group.visible = v; }
+  destroy() { scene.remove(this.group); this.group.traverse(o => { o.geometry?.dispose(); }); }
+}
+
+// =====================================================================
+// ROVER
+// =====================================================================
+class Rover {
+  constructor() {
+    this.obj = new THREE.Group();
+    this.model = new THREE.Group();
+    this.obj.add(this.model);
+    const M = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.15, ...o });
+    const white = M(0xe9e6e1), grey = M(0x9aa0a8, { metalness: .5, roughness: .4 }), dark = M(0x23262c, { roughness: .7 });
+    const gold = M(0xc9a24a, { metalness: .8, roughness: .35 }), panel = M(0x1a2a5e, { metalness: .5, roughness: .25 });
+    const add = (geo, mat, x, y, z, parent = this.model) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m; };
+
+    add(new THREE.BoxGeometry(1.5, 0.55, 2.1), white, 0, 1.0, 0);             // body
+    add(new THREE.BoxGeometry(1.56, 0.06, 2.16), grey, 0, 1.3, 0);            // deck
+    add(new THREE.BoxGeometry(2.1, 0.05, 1.5), panel, 0, 1.42, -0.15);        // solar panels (original)
+    add(new THREE.BoxGeometry(0.5, 0.25, 0.6), gold, -0.45, 1.5, 0.55);       // gold-foil electronics
+    const rtg = add(new THREE.CylinderGeometry(0.22, 0.22, 0.75, 16), dark, 0, 1.25, -1.25); rtg.rotation.x = 0.9;
+    // Camera mast (antenna + glowing camera from the original)
+    add(new THREE.CylinderGeometry(0.05, 0.06, 1.2, 10), grey, 0.5, 1.95, 0.85);
+    const head = add(new THREE.BoxGeometry(0.42, 0.22, 0.24), white, 0.5, 2.62, 0.88);
+    add(new THREE.CylinderGeometry(0.05, 0.05, 0.08, 12), dark, -0.1, 0, 0.14, head).rotation.x = Math.PI / 2;
+    add(new THREE.CylinderGeometry(0.05, 0.05, 0.08, 12), dark, 0.1, 0, 0.14, head).rotation.x = Math.PI / 2;
+    this.beacon = add(new THREE.SphereGeometry(0.06, 10, 8), new THREE.MeshStandardMaterial({ color: 0xffee66, emissive: 0xffdd33, emissiveIntensity: 3 }), 0, 0.16, 0, head);
+    const dish = add(new THREE.CylinderGeometry(0.32, 0.32, 0.04, 24), grey, -0.5, 1.75, -0.6); dish.rotation.x = 1.1;
+    // Robotic arm
+    const arm = add(new THREE.BoxGeometry(0.08, 0.08, 0.9), grey, -0.45, 0.85, 1.4); arm.rotation.x = -0.4;
+    add(new THREE.BoxGeometry(0.2, 0.2, 0.2), dark, -0.45, 0.65, 1.82);
+    // Headlights
+    for (const x of [-0.45, 0.45]) add(new THREE.BoxGeometry(0.18, 0.08, 0.04), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2d8, emissiveIntensity: 2 }), x, 1.05, 1.06);
+
+    // 6 wheels + rocker-bogie suspension
+    this.wheels = [];
+    const wheelGeo = new THREE.CylinderGeometry(0.34, 0.34, 0.3, 22); wheelGeo.rotateZ(Math.PI / 2);
+    const hubGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.32, 12); hubGeo.rotateZ(Math.PI / 2);
+    for (const side of [-1, 1]) {
+      for (const z of [0.95, 0, -0.95]) {
+        const w = add(wheelGeo, grey, side * 0.98, 0.34, z);
+        add(hubGeo, dark, 0, 0, 0, w);
+        for (let k = 0; k < 6; k++) { const g = add(new THREE.BoxGeometry(0.31, 0.03, 0.08), dark, 0, 0, 0, w); g.rotation.x = k * Math.PI / 3; g.position.set(0, Math.cos(k * Math.PI / 3) * 0.33, Math.sin(k * Math.PI / 3) * 0.33); }
+        this.wheels.push(w);
+      }
+      const rocker = add(new THREE.BoxGeometry(0.07, 0.07, 1.95), dark, side * 0.85, 0.72, 0); rocker.rotation.x = 0.05;
+      add(new THREE.BoxGeometry(0.07, 0.4, 0.07), dark, side * 0.85, 0.55, 0.95);
+      add(new THREE.BoxGeometry(0.07, 0.4, 0.07), dark, side * 0.85, 0.55, -0.95);
+    }
+
+    // Front spotlight
+    this.headlight = new THREE.SpotLight(0xfff0d0, 60, 45, Math.PI / 5, 0.5, 1.6);
+    this.headlight.position.set(0, 1.1, 1.1); this.headlight.target.position.set(0, 0, 10);
+    this.model.add(this.headlight, this.headlight.target);
+
+    scene.add(this.obj);
+    // Rules from the original
+    this.speed = 8; this.jump_power = 5; this.gravity = -20;
+    this.velocity_y = 0; this.is_grounded = false;
+    this.yaw = 0; this.tilt = new THREE.Quaternion(); this.distance = 0; this.currentSpeed = 0;
+  }
+  get position() { return this.obj.position; }
+}
+
+// =====================================================================
+// WEATHER (original presets + visual parameters)
+// =====================================================================
+const WEATHER = {
+  clear:     { sky: [210, 170, 140], light: [255, 220, 190], fog: [220, 180, 150], fog_density: 0.008, ambient: 0.7,
+               top: [150, 108, 82], glow: [255, 235, 210], glowPower: 6, sunElev: 52, sunAz: 35, sunInt: 2.8, temp: -20, dust: 700, dustOp: .25, wind: 2, stars: 0, label: 'Clear' },
+  storm:  { sky: [140, 90, 60], light: [180, 120, 80], fog: [160, 100, 60], fog_density: 0.045, ambient: 0.35,
+               top: [110, 68, 44], glow: [200, 140, 90], glowPower: 3, sunElev: 45, sunAz: 35, sunInt: 0.9, temp: -38, dust: 7000, dustOp: .55, wind: 22, stars: 0, label: 'Dust storm' },
+  sunset: { sky: [200, 110, 70], light: [255, 140, 90], fog: [210, 120, 90], fog_density: 0.020, ambient: 0.5,
+               top: [70, 52, 62], glow: [120, 165, 230], glowPower: 10, sunElev: 9, sunAz: 225, sunInt: 2.4, temp: -55, dust: 1200, dustOp: .25, wind: 4, stars: .25, label: 'Sunset' },
+  night:     { sky: [20, 20, 45], light: [90, 110, 160], fog: [15, 15, 35], fog_density: 0.030, ambient: 0.15,
+               top: [4, 5, 14], glow: [30, 40, 80], glowPower: 4, sunElev: 38, sunAz: 120, sunInt: 0.9, temp: -80, dust: 400, dustOp: .15, wind: 2, stars: 1, label: 'Night' },
+};
+const WEATHER_ICONS = {
+  clear: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  storm: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8h11a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h8"/></svg>',
+  sunset: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 18a5 5 0 0 0-10 0M12 2v7M4.2 10.2l1.4 1.4M1 18h2M21 18h2M18.4 11.6l1.4-1.4M23 22H1M8 6l4-4 4 4"/></svg>',
+  night: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
+};
+
+const weather = {
+  current: 'clear',
+  cur: null, target: null,
+  snapshot(p) {
+    const el = THREE.MathUtils.degToRad(p.sunElev), az = THREE.MathUtils.degToRad(p.sunAz);
+    return {
+      top: srgb(...p.top), horizon: srgb(...p.sky), glow: srgb(...p.glow), fog: srgb(...p.fog), light: srgb(...p.light),
+      fogDensity: p.fog_density / S, sunInt: p.sunInt, hemi: 0.25 + p.ambient * 1.4, glowPower: p.glowPower,
+      sunDir: new THREE.Vector3(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az)),
+      dust: p.dust, dustOp: p.dustOp, wind: p.wind, stars: p.stars, temp: p.temp, sunDisc: p === WEATHER.night ? 0 : 1,
+    };
+  },
+  apply(name, instant = false) {
+    this.current = name;
+    this.target = this.snapshot(WEATHER[name]);
+    if (instant || !this.cur) this.cur = this.snapshot(WEATHER[name]);
+    document.getElementById('storm-overlay').style.opacity = name === 'storm' ? 1 : 0;
+    document.querySelectorAll('#weather-switch button').forEach(b => b.classList.toggle('active', b.dataset.key === name));
+  },
+  next() { const k = Object.keys(WEATHER); this.apply(k[(k.indexOf(this.current) + 1) % k.length]); toast(t('weatherToast', t('w_' + this.current)), t('wn_' + this.current)); },
+  update(dt) {
+    const c = this.cur, t = this.target, f = damp(2.2, dt);
+    for (const k of ['top', 'horizon', 'glow', 'fog', 'light']) c[k].lerp(t[k], f);
+    for (const k of ['fogDensity', 'sunInt', 'hemi', 'glowPower', 'dust', 'dustOp', 'wind', 'stars', 'temp', 'sunDisc']) c[k] = lerp(c[k], t[k], f);
+    c.sunDir.lerp(t.sunDir, f).normalize();
+
+    skyUniforms.topColor.value.copy(c.top); skyUniforms.horizonColor.value.copy(c.horizon);
+    skyUniforms.glowColor.value.copy(c.glow); skyUniforms.sunColor.value.copy(c.light);
+    skyUniforms.sunDir.value.copy(c.sunDir); skyUniforms.glowPower.value = c.glowPower; skyUniforms.sunDisc.value = c.sunDisc;
+    scene.fog.color.copy(c.fog); scene.fog.density = c.fogDensity * (rover.underground ? 0.3 : 1);
+    sun.color.copy(c.light); sun.intensity = c.sunInt;
+    hemi.color.copy(c.horizon).lerp(c.light, 0.4); hemi.groundColor.setRGB(0.25, 0.1, 0.05); hemi.intensity = c.hemi;
+    stars.material.opacity = c.stars; moons.children.forEach(m => m.material.opacity = c.stars);
+    dust.material.opacity = c.dustOp; dust.material.color.copy(c.fog).lerp(new THREE.Color(1, 0.8, 0.6), 0.3);
+    dust.geometry.setDrawRange(0, Math.round(c.dust));
+    dust.material.size = this.current === 'storm' ? 0.45 : 0.25;
+  },
+};
+// =====================================================================
+// TERRAINS (original definitions) + real data
+// =====================================================================
+const TERRAIN_PRESETS = {
+  '1': ['Valles Marineris', { size: 80, height_scale: 7, roughness: 0.55, color_base: [160, 80, 50], crater_density: 8, has_canyon: true }],
+  '2': ['Gale Crater', { size: 80, height_scale: 5, roughness: 0.7, color_base: [140, 65, 40], crater_density: 15, has_dunes: false }],
+  '3': ['North Pole (Ice)', { size: 80, height_scale: 4, roughness: 0.4, color_base: [180, 170, 160], crater_density: 6, has_ice: true, has_dunes: true }],
+  '4': ['Olympus Mons', { size: 80, height_scale: 14, roughness: 0.65, color_base: [120, 60, 35], crater_density: 10, has_ice: true }],
+};
+// Geographic data and card art for each landing site (language-independent)
+const SITE_INFO = {
+  '1': { lat: -13.9, lon: -59.2, art: 'linear-gradient(160deg, rgba(255,140,90,.25), transparent 60%), radial-gradient(ellipse at 50% 120%, rgba(120,40,15,.8), transparent 70%)' },
+  '2': { lat: -5.4, lon: 137.8, art: 'radial-gradient(circle at 70% 40%, rgba(255,150,100,.3), transparent 45%), radial-gradient(circle at 70% 40%, transparent 30%, rgba(100,35,15,.7) 32%, transparent 60%)' },
+  '3': { lat: 85.0, lon: 0.0, art: 'linear-gradient(180deg, rgba(230,240,255,.35), transparent 55%), repeating-linear-gradient(170deg, rgba(120,90,70,.4) 0 6px, transparent 6px 16px)' },
+  '4': { lat: 18.65, lon: -133.8, art: 'linear-gradient(200deg, rgba(255,120,70,.3), transparent 50%), radial-gradient(ellipse at 50% 110%, rgba(90,30,12,.9), transparent 65%)' },
+};
+
+// =====================================================================
+// LANGUAGES / IDIOMAS (English · Español)
+// =====================================================================
+const I18N = {
+  en: {
+    title: 'Mars · Terrain Simulator',
+    metaDesc: 'Explore Mars in 3D: Valles Marineris, Gale Crater, the North Pole and Olympus Mons. A project for the NASA International Space Apps Challenge.',
+    canvasAria: '3D view of the surface of Mars', language: 'Language',
+    telemetry: 'Telemetry', telemetryAria: 'Rover telemetry', location: 'Location', elevation: 'Elevation', speed: 'Speed', tilt: 'Tilt',
+    temperature: 'Temperature', gravity: 'Gravity', distance: 'Distance', power: 'Power · solar panels',
+    targets: 'Science targets', targetsHint: 'Drive to the beacons and stop next to them to analyze the samples.', terrainsAria: 'Terrains',
+    tunnels: 'Tunnels', tunnelsTitle: 'Underground tunnels (T)', weather: 'Weather', weatherTitle: 'Next weather (C)',
+    reset: 'Reset', resetTitle: 'Reset terrain (R)', menu: 'Menu', pauseTitle: 'Pause (ESC)',
+    startTitle: 'MARS', startSub: 'Terrain exploration simulator',
+    startDesc: 'Take control of a rover and explore four real regions of the Red Planet. Cross canyons, craters, ice caps and the tallest volcano in the solar system, analyze science samples, uncover a network of underground tunnels and retrace the real route of the NASA Perseverance rover.',
+    startMission: 'Start mission', controls: 'Controls', gravityVal: '3.71 m/s²', surfaceGravity: 'Surface gravity', avgTemp: 'Average temperature',
+    solLength: 'Length of a sol', chooseSite: 'Choose your landing site', team: 'Team Isabelinos Espaciales', dataCredit: 'Science facts based on public NASA information',
+    paused: 'Mission paused', resume: 'Resume', restart: 'Restart terrain', backMenu: 'Back to main menu', manual: 'Rover manual',
+    k_drive: 'Drive the rover (arrow keys also work)', kbdSpace: 'SPACE', k_jump: 'Jump', kbdDrag: 'Right-click + drag', k_orbit: 'Orbit the camera (left-click works too)',
+    kbdWheel: 'Wheel', k_zoom: 'Zoom', k_terrain: 'Change terrain', k_weather: 'Cycle weather: clear, dust storm, sunset, night',
+    k_tunnels: 'Show / hide the underground tunnels', k_enter: 'Enter / exit the tunnels (at the access shaft)', k_reset: 'Reset the terrain',
+    k_pause: 'Pause / menu', k_lang: 'Switch language (Español / English)', gotIt: 'Got it', loading: 'Preparing mission…',
+    chooseMission: 'Choose your mission', mission: 'Mission', missionAria: 'Mission objectives', m_science: 'Science samples', m_route: 'Perseverance route',
+    k_mission: 'Switch mission (samples / Perseverance route)', approx: '(approx.)', scale: r => `Scale ≈ 1:${r}.`,
+    hint_route: 'Follow the path of the NASA Perseverance rover through Jezero Crater, traced to scale on this terrain. Visit the points in order.',
+    routeIntro: 'Mission: Perseverance route',
+    routeIntroBody: 'Retrace the 2021-2024 path of the NASA Perseverance rover in Jezero Crater, traced to scale on this terrain. Drive to the orange beacons in order.',
+    waypointReached: n => `Waypoint reached: ${n}`, wrongOrder: 'Visit this point first:', missionSwitched: n => `Mission: ${n}`,
+    mcTitle: 'Mission Complete — Successful!',
+    mcBodyScience: n => `All 5 science samples at ${n} have been analyzed. Great work, explorer!`,
+    mcBodyRoute: n => `You retraced the full Perseverance route on ${n}, from Octavia E. Butler Landing to Neretva Vallis.`,
+    mcSamples: 'Samples', mcWaypoints: 'Waypoints', mcDistance: 'Distance', mcTime: 'Mission time',
+    mcContinue: 'Keep exploring', mcNext: n => `Next site: ${n}`, mcSwitchTo: n => `Try: ${n}`, mcMenu: 'Main menu',
+    routeComplete: 'Perseverance route complete!',
+    routeCompleteBody: 'You retraced the Mars 2020 traverse from Octavia E. Butler Landing to Neretva Vallis. Try the route on another terrain (keys 1-4).',
+    jezeroName: 'Jezero Crater (center)', jezeroFact: 'Official coordinates of the center of this 45 km impact crater.',
+    route: {
+      names: ['Landing zone · Octavia E. Butler Landing', 'Delta Front · Three Forks', 'Ancient riverbed · Fan Front', 'Bright Angel formation', 'Neretva Vallis'],
+      facts: ['Exact spot where the Perseverance rover touched down on February 18, 2021.',
+              'Front of the ancient river delta: site of the Three Forks sample depot and the start of the Delta Front campaign.',
+              'River sediments of the alluvial fan on the western edge of the crater.',
+              'Light-toned rock outcrop inside Neretva Vallis, explored in 2024, where the rover found the Cheyava Falls rock with potential biosignatures.',
+              'Ancient river valley that cut through the western rim of Jezero, feeding the lake billions of years ago.'],
+    },
+    site: 'SITE', west: 'W', compass: { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SW', 270: 'W', 315: 'NW' },
+    nominal: 'All systems nominal', st_under: 'Underground mode', st_power: 'Low power', st_slope: 'Dangerous slope', st_storm: 'Dust storm',
+    analyzing: 'Analyzing', upSurface: 'Return to the surface', descend: 'Descend into the tunnels',
+    w_clear: 'Clear', w_storm: 'Dust storm', w_sunset: 'Sunset', w_night: 'Night',
+    wn_clear: 'A butterscotch sky, tinted by fine dust suspended in the atmosphere.',
+    wn_storm: 'Martian dust storms can engulf the entire planet for weeks.',
+    wn_sunset: 'Sunsets on Mars look blue: fine dust scatters blue light around the Sun.',
+    wn_night: 'With no thick atmosphere to hold in heat, nights drop below -80 °C. Overhead: Phobos and Deimos.',
+    weatherToast: w => `Weather: ${w}`, generating: n => `Generating terrain: ${n}`, terrainLoaded: n => `Terrain loaded: ${n}`,
+    tunnelsOn: 'Tunnels ENABLED', tunnelsOnBody: 'Subsurface radar: a tunnel network 12 m below ground. Drive to the access shaft beacon and press E.',
+    tunnelsOff: 'Tunnels disabled', descending: 'Descending into the tunnels', descendingBody: 'Explore the underground network. Return to the shaft and press E to exit.',
+    backSurface: 'Back on the surface', powerOut: 'Power depleted', powerOutBody: 'Emergency mode: reduced speed. The solar panels recharge in daylight.',
+    sampleAnalyzed: n => `Sample analyzed: ${n}`, missionComplete: n => `Mission complete at ${n}!`,
+    missionCompleteBody: 'You analyzed every sample. Try another landing site (keys 1-4).',
+    landing: n => `Landing confirmed: ${n}`, landingBody: 'Analyze the 5 science samples marked with blue beacons. Press ESC to see the controls.',
+    terrains: { '1': 'Valles Marineris', '2': 'Gale Crater', '3': 'North Pole (Ice)', '4': 'Olympus Mons' },
+    terrainsShort: { '1': 'Valles Marineris', '2': 'Gale Crater', '3': 'North Pole', '4': 'Olympus Mons' },
+    sites: {
+      '1': { short: 'Canyon', tags: ['Canyon', 'Craters'],
+             desc: 'One of the largest canyon systems in the solar system: over 4,000 km long.',
+             targets: ['Layered strata', 'Landslide deposit', 'Exposed basalt', 'Canyon-floor sediment', 'Hydrated mineral'],
+             facts: ['Valles Marineris is more than 4,000 km long and up to 7 km deep.',
+                     'On Earth, it would stretch across the entire United States, coast to coast.',
+                     'Its walls show layers that reveal millions of years of geologic history.',
+                     'Scientists think it formed through tectonics, as the crust stretched and cracked apart.',
+                     'Orbiters have detected hydrated minerals in its walls.'] },
+      '2': { short: 'Craters', tags: ['Craters', 'Curiosity'],
+             desc: 'A 154 km impact crater where the NASA Curiosity rover landed in 2012.',
+             targets: ['Lakebed clay', 'Sedimentary rock', 'Sulfate vein', 'Sandstone', 'Organic sample'],
+             facts: ['Gale Crater is about 154 km across.',
+                     'The NASA Curiosity rover landed here in August 2012.',
+                     'At its center rises Mount Sharp (Aeolis Mons), about 5 km high.',
+                     'Curiosity found evidence that Gale held a lake billions of years ago.',
+                     'Curiosity detected organic molecules in ancient rocks in this crater.'] },
+      '3': { short: 'Ice · Dunes', tags: ['Ice', 'Dunes'],
+             desc: 'A polar cap of water ice ringed by a sea of dark dunes.',
+             targets: ['Water ice', 'CO₂ frost', 'Polar dune', 'Layered deposit', 'Ice core'],
+             facts: ['The north polar cap is made mostly of water ice.',
+                     'In winter it is covered by a seasonal layer of CO₂ ice (dry ice).',
+                     'The cap is about 1,000 km across.',
+                     'Its ice layers record past climate changes on Mars.',
+                     'The NASA Phoenix lander confirmed water ice in the arctic plains in 2008.'] },
+      '4': { short: 'Volcano', tags: ['Volcano', 'Ice'],
+             desc: 'The tallest volcano in the solar system: about 2.5 times the height of Everest.',
+             targets: ['Basaltic lava', 'Lava tube', 'Volcanic ash', 'Escarpment', 'Summit frost'],
+             facts: ['Olympus Mons rises about 22 km, making it the tallest volcano in the solar system.',
+                     'Its base is about 600 km across, roughly the size of Arizona.',
+                     'It is a shield volcano, like those in Hawaii, but far larger.',
+                     'Its summit has a caldera about 80 km wide.',
+                     'Low gravity and the lack of moving tectonic plates let it grow so large.'] },
+    },
+  },
+  es: {
+    title: 'Marte · Simulador de Terrenos',
+    metaDesc: 'Explora Marte en 3D: Valles Marineris, Cráter Gale, Polo Norte y Monte Olimpo. Proyecto para el NASA International Space Apps Challenge.',
+    canvasAria: 'Vista 3D de la superficie de Marte', language: 'Idioma',
+    telemetry: 'Telemetría', telemetryAria: 'Telemetría del rover', location: 'Ubicación', elevation: 'Elevación', speed: 'Velocidad', tilt: 'Inclinación',
+    temperature: 'Temperatura', gravity: 'Gravedad', distance: 'Recorrido', power: 'Energía · paneles solares',
+    targets: 'Objetivos científicos', targetsHint: 'Conduce hasta las balizas y detente junto a ellas para analizar las muestras.', terrainsAria: 'Terrenos',
+    tunnels: 'Túneles', tunnelsTitle: 'Túneles subterráneos (T)', weather: 'Clima', weatherTitle: 'Siguiente clima (C)',
+    reset: 'Reset', resetTitle: 'Reiniciar terreno (R)', menu: 'Menú', pauseTitle: 'Pausa (ESC)',
+    startTitle: 'MARTE', startSub: 'Simulador de exploración de terrenos',
+    startDesc: 'Toma el control de un rover y explora cuatro regiones reales del planeta rojo. Recorre cañones, cráteres, casquetes de hielo y el volcán más alto del sistema solar, analiza muestras científicas, descubre la red de túneles subterráneos y recorre la ruta real del rover Perseverance de la NASA.',
+    startMission: 'Iniciar misión', controls: 'Controles', gravityVal: '3,71 m/s²', surfaceGravity: 'Gravedad superficial', avgTemp: 'Temperatura media',
+    solLength: 'Duración de un sol', chooseSite: 'Selecciona el sitio de aterrizaje', team: 'Equipo Isabelinos Espaciales', dataCredit: 'Datos científicos basados en información pública de la NASA',
+    paused: 'Misión en pausa', resume: 'Continuar', restart: 'Reiniciar terreno', backMenu: 'Volver al menú principal', manual: 'Manual del rover',
+    k_drive: 'Mover el rover (también flechas)', kbdSpace: 'ESPACIO', k_jump: 'Saltar', kbdDrag: 'Clic der. + arrastrar', k_orbit: 'Orbitar la cámara (también clic izquierdo)',
+    kbdWheel: 'Rueda', k_zoom: 'Zoom', k_terrain: 'Cambiar de terreno', k_weather: 'Ciclar clima: claro, tormenta, atardecer, noche',
+    k_tunnels: 'Activar / desactivar túneles subterráneos', k_enter: 'Entrar / salir del túnel (en el pozo de acceso)', k_reset: 'Reiniciar el terreno',
+    k_pause: 'Pausa / menú', k_lang: 'Cambiar idioma (Español / English)', gotIt: 'Entendido', loading: 'Preparando la misión…',
+    chooseMission: 'Selecciona la misión', mission: 'Misión', missionAria: 'Objetivos de la misión', m_science: 'Muestras científicas', m_route: 'Ruta Perseverance',
+    k_mission: 'Cambiar misión (muestras / ruta Perseverance)', approx: '(aprox.)', scale: r => `Escala ≈ 1:${r}.`,
+    hint_route: 'Sigue el recorrido del rover Perseverance de la NASA por el cráter Jezero, trazado a escala sobre este terreno. Visita los puntos en orden.',
+    routeIntro: 'Misión: Ruta Perseverance',
+    routeIntroBody: 'Recorre el trayecto 2021-2024 del rover Perseverance de la NASA en el cráter Jezero, trazado a escala sobre este terreno. Conduce hasta las balizas naranjas en orden.',
+    waypointReached: n => `Punto alcanzado: ${n}`, wrongOrder: 'Primero visita este punto:', missionSwitched: n => `Misión: ${n}`,
+    mcTitle: '¡Misión completada con éxito!',
+    mcBodyScience: n => `Analizaste las 5 muestras científicas en ${n}. ¡Excelente trabajo, explorador!`,
+    mcBodyRoute: n => `Recorriste la ruta completa del Perseverance en ${n}, desde Octavia E. Butler Landing hasta Neretva Vallis.`,
+    mcSamples: 'Muestras', mcWaypoints: 'Puntos de ruta', mcDistance: 'Recorrido', mcTime: 'Tiempo de misión',
+    mcContinue: 'Seguir explorando', mcNext: n => `Siguiente sitio: ${n}`, mcSwitchTo: n => `Probar: ${n}`, mcMenu: 'Menú principal',
+    routeComplete: '¡Ruta Perseverance completada!',
+    routeCompleteBody: 'Recorriste el trayecto de Mars 2020 desde Octavia E. Butler Landing hasta Neretva Vallis. Prueba la ruta en otro terreno (teclas 1-4).',
+    jezeroName: 'Cráter Jezero (centro)', jezeroFact: 'Coordenadas oficiales del centro de este cráter de impacto de 45 km de diámetro.',
+    route: {
+      names: ['Zona de aterrizaje · Octavia E. Butler Landing', 'Delta Front · Three Forks', 'Antiguo cauce · Fan Front', 'Formación Bright Angel', 'Neretva Vallis'],
+      facts: ['Punto exacto donde aterrizó el rover Perseverance el 18 de febrero de 2021.',
+              'Zona frontal del antiguo delta fluvial: allí se ubicó el depósito de muestras Three Forks y comenzó la campaña Delta Front.',
+              'Sector de sedimentos fluviales del abanico aluvial en el borde oeste del cráter.',
+              'Afloramiento rocoso de tonos claros dentro de Neretva Vallis, explorado en 2024, donde el rover halló la roca Cheyava Falls con posibles biofirmas.',
+              'Antiguo valle fluvial que atravesó el borde occidental de Jezero, alimentando el lago hace miles de millones de años.'],
+    },
+    site: 'SITIO', west: 'O', compass: { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SO', 270: 'O', 315: 'NO' },
+    nominal: 'Sistemas nominales', st_under: 'Modo subterráneo', st_power: 'Energía baja', st_slope: 'Pendiente peligrosa', st_storm: 'Tormenta de polvo',
+    analyzing: 'Analizando', upSurface: 'Subir a la superficie', descend: 'Descender al túnel',
+    w_clear: 'Claro', w_storm: 'Tormenta', w_sunset: 'Atardecer', w_night: 'Noche',
+    wn_clear: 'Cielo color caramelo por el polvo fino suspendido en la atmósfera.',
+    wn_storm: 'Las tormentas de polvo marcianas pueden cubrir el planeta entero durante semanas.',
+    wn_sunset: 'En Marte los atardeceres son azulados: el polvo dispersa la luz azul alrededor del Sol.',
+    wn_night: 'Sin una atmósfera densa que retenga el calor, las noches bajan de -80 °C. Arriba: Fobos y Deimos.',
+    weatherToast: w => `Clima: ${w}`, generating: n => `Generando terreno: ${n}`, terrainLoaded: n => `Terreno cargado: ${n}`,
+    tunnelsOn: 'Túneles ACTIVADOS', tunnelsOnBody: 'Radar subsuperficial: red de túneles a 12 m de profundidad. Ve a la baliza del pozo de acceso y pulsa E.',
+    tunnelsOff: 'Túneles desactivados', descending: 'Descendiendo al túnel', descendingBody: 'Explora la red subterránea. Vuelve al pozo y pulsa E para salir.',
+    backSurface: 'De vuelta en la superficie', powerOut: 'Energía agotada', powerOutBody: 'Modo de emergencia: velocidad reducida. Los paneles solares recargan con luz de día.',
+    sampleAnalyzed: n => `Muestra analizada: ${n}`, missionComplete: n => `¡Misión completada en ${n}!`,
+    missionCompleteBody: 'Has analizado todas las muestras. Prueba otro sitio de aterrizaje (teclas 1-4).',
+    landing: n => `Aterrizaje confirmado: ${n}`, landingBody: 'Analiza las 5 muestras científicas marcadas con balizas azules. Pulsa ESC para ver los controles.',
+    terrains: { '1': 'Valle Marineris', '2': 'Cráter Gale', '3': 'Polo Norte (Hielo)', '4': 'Monte Olimpo' },
+    terrainsShort: { '1': 'Valle Marineris', '2': 'Cráter Gale', '3': 'Polo Norte', '4': 'Monte Olimpo' },
+    sites: {
+      '1': { short: 'Cañón', tags: ['Cañón', 'Cráteres'],
+             desc: 'Uno de los mayores sistemas de cañones del sistema solar: más de 4.000 km de largo.',
+             targets: ['Capas estratificadas', 'Depósito de deslizamiento', 'Basalto expuesto', 'Sedimento del fondo', 'Mineral hidratado'],
+             facts: ['Valles Marineris mide más de 4.000 km de largo y hasta 7 km de profundidad.',
+                     'Si estuviera en la Tierra, cruzaría todo Estados Unidos de costa a costa.',
+                     'Sus paredes muestran capas que revelan millones de años de historia geológica.',
+                     'Se cree que se formó por tectónica: la corteza se estiró y se fracturó.',
+                     'Los orbitadores han detectado minerales hidratados en sus paredes.'] },
+      '2': { short: 'Cráteres', tags: ['Cráteres', 'Curiosity'],
+             desc: 'Cráter de impacto de 154 km donde aterrizó el rover Curiosity de la NASA en 2012.',
+             targets: ['Arcilla lacustre', 'Roca sedimentaria', 'Veta de sulfato', 'Arenisca', 'Muestra orgánica'],
+             facts: ['El cráter Gale mide unos 154 km de diámetro.',
+                     'El rover Curiosity de la NASA aterrizó aquí en agosto de 2012.',
+                     'En su centro se eleva el Monte Sharp (Aeolis Mons), de unos 5 km de altura.',
+                     'Curiosity encontró evidencias de que Gale albergó un lago hace miles de millones de años.',
+                     'Curiosity detectó moléculas orgánicas en rocas antiguas de este cráter.'] },
+      '3': { short: 'Hielo · Dunas', tags: ['Hielo', 'Dunas'],
+             desc: 'Casquete polar de hielo de agua rodeado de un mar de dunas oscuras.',
+             targets: ['Hielo de agua', 'Escarcha de CO₂', 'Duna polar', 'Capa estratificada', 'Núcleo de hielo'],
+             facts: ['El casquete polar norte está formado principalmente por hielo de agua.',
+                     'En invierno se cubre con una capa estacional de hielo de CO₂ (hielo seco).',
+                     'El casquete tiene unos 1.000 km de diámetro.',
+                     'Sus capas de hielo registran los cambios climáticos del pasado de Marte.',
+                     'La sonda Phoenix de la NASA confirmó hielo de agua en las llanuras árticas en 2008.'] },
+      '4': { short: 'Volcán', tags: ['Volcán', 'Hielo'],
+             desc: 'El volcán más alto del sistema solar: unas 2,5 veces la altura del Everest.',
+             targets: ['Lava basáltica', 'Tubo de lava', 'Ceniza volcánica', 'Escarpe', 'Escarcha de cumbre'],
+             facts: ['El Monte Olimpo se eleva unos 22 km: es el volcán más alto del sistema solar.',
+                     'Su base mide unos 600 km de diámetro, casi el tamaño de Arizona.',
+                     'Es un volcán en escudo, como los de Hawái, pero muchísimo más grande.',
+                     'Su cumbre tiene una caldera de unos 80 km de ancho.',
+                     'La baja gravedad y la ausencia de placas tectónicas móviles le permitieron crecer tanto.'] },
+    },
+  },
+};
+
+// Initial language: ?lang=es|en, then the saved choice, then the browser language
+let lang = (() => {
+  const q = new URLSearchParams(location.search).get('lang');
+  if (q && I18N[q]) return q;
+  try { const saved = localStorage.getItem('mars-lang'); if (saved && I18N[saved]) return saved; } catch (e) { /* storage unavailable */ }
+  return (navigator.language || 'en').toLowerCase().startsWith('es') ? 'es' : 'en';
+})();
+function t(key, ...args) {
+  const v = I18N[lang][key] ?? I18N.en[key];
+  return typeof v === 'function' ? v(...args) : v;
+}
+const terrainName = k => t('terrains')[k];
+const siteText = k => t('sites')[k];
+const poiName = p => siteText(state.current_key).targets[p.idx];
+
+// =====================================================================
+// GLOBAL STATE
+// =====================================================================
+const state = {
+  current_terrain: null, current_key: '1', tunnels: null, show_tunnels: false,
+  mode: 'menu',        // menu | play | pause
+  mission: 'science', route: null,   // mission: science | route
+  pois: [], sol: 1, lmst: 10 * 60, elevator: null,
+};
+const rover = new Rover();
+rover.underground = false;
+let power = 100;
+
+// ---------- Science targets (beacons) ----------
+const poiGroup = new THREE.Group(); scene.add(poiGroup);
+function buildPOIs(key, terrain) {
+  poiGroup.clear(); state.pois = [];
+  const r = mulberry32(1000 + Number(key) * 17);
+  const pts = [];
+  while (pts.length < 5) {
+    const x = (r() - .5) * (W - 50), z = (r() - .5) * (W - 50);
+    if (Math.hypot(x, z + 36) < 30) continue;
+    if (pts.some(p => Math.hypot(p.x - x, p.z - z) < 45)) continue;
+    pts.push({ x, z });
+  }
+  pts.forEach((p, i) => {
+    const y = terrain.heightAt(p.x, p.z);
+    const g = new THREE.Group(); g.position.set(p.x, y, p.z);
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 60, 16, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0x4fd1ff, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false }));
+    beam.position.y = 30;
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.6), new THREE.MeshStandardMaterial({ color: 0x4fd1ff, emissive: 0x4fd1ff, emissiveIntensity: 2.2 }));
+    gem.position.y = 2.2;
+    const ring = new THREE.Mesh(new THREE.RingGeometry(3.2, 3.5, 48), new THREE.MeshBasicMaterial({ color: 0x4fd1ff, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.3;
+    const sample = new THREE.Mesh(new THREE.DodecahedronGeometry(0.7), new THREE.MeshStandardMaterial({ color: 0x7a4a33, roughness: 0.9, flatShading: true }));
+    sample.position.y = 0.3; sample.castShadow = true;
+    g.add(beam, gem, ring, sample); poiGroup.add(g);
+    state.pois.push({ ...p, idx: i, done: false, progress: 0, g, beam, gem, ring });
+  });
+  renderMissionList();
+}
+
+// =====================================================================
+// PERSEVERANCE ROUTE (NASA Mars 2020 · Jezero Crater)
+// Waypoints from PerseveranceMission.pdf, projected to scale onto every terrain
+// =====================================================================
+const PERSEVERANCE_ROUTE = [
+  { lat: 18.4447, lon: 77.4508, prec: 4, approx: false },  // Landing zone · Octavia E. Butler Landing (Feb 18, 2021)
+  { lat: 18.453,  lon: 77.408,  prec: 3, approx: false },  // Delta Front · Three Forks
+  { lat: 18.46,   lon: 77.38,   prec: 2, approx: true },   // Ancient riverbed · Fan Front
+  { lat: 18.49,   lon: 77.34,   prec: 2, approx: true },   // Bright Angel formation (Cheyava Falls, 2024)
+  { lat: 18.55,   lon: 77.20,   prec: 2, approx: false },  // Neretva Vallis
+];
+const JEZERO_CENTER = { lat: 18.38, lon: 77.58, prec: 2, approx: false };   // reference: center of Jezero Crater
+const MARS_KM_PER_DEG = 3389.5 * Math.PI / 180;                             // ~59.16 km per degree (Mars radius 3389.5 km)
+
+// Local equirectangular projection (North = -Z), scaled so the whole route fits the 240 m terrain
+const ROUTE_PROJ = (() => {
+  const all = [...PERSEVERANCE_ROUTE, JEZERO_CENTER];
+  const mid = k => (Math.min(...all.map(p => p[k])) + Math.max(...all.map(p => p[k]))) / 2;
+  const lat0 = mid('lat'), lon0 = mid('lon'), cosLat = Math.cos(THREE.MathUtils.degToRad(lat0));
+  const km = p => ({ x: (p.lon - lon0) * MARS_KM_PER_DEG * cosLat, z: -(p.lat - lat0) * MARS_KM_PER_DEG });
+  const span = Math.max(...all.map(km).flatMap(q => [Math.abs(q.x), Math.abs(q.z)]));   // km from center to farthest point
+  const scale = 95 / (span * 1000);                                                       // world meters per real meter
+  return { project: p => { const q = km(p); return { x: q.x * 1000 * scale, z: q.z * 1000 * scale }; }, ratio: Math.round(1 / scale) };
+})();
+const fmtCoord = p => `${p.lat.toFixed(p.prec)}°N ${p.lon.toFixed(p.prec)}°E${p.approx ? ' ' + t('approx') : ''}`;
+const routeName = i => t('route').names[i];
+
+// Animated chevrons for the path
+const chevronTex = (() => {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 64;
+  const x = c.getContext('2d');
+  x.strokeStyle = '#fff'; x.lineWidth = 11; x.lineCap = 'round'; x.lineJoin = 'round';
+  x.beginPath(); x.moveTo(46, 14); x.lineTo(78, 32); x.lineTo(46, 50); x.stroke();
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping; tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  return tex;
+})();
+
+function labelSprite(text) {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const x = c.getContext('2d');
+  x.fillStyle = '#ffffff'; x.beginPath(); x.arc(64, 64, 54, 0, Math.PI * 2); x.fill();
+  x.lineWidth = 8; x.strokeStyle = 'rgba(0,0,0,.3)'; x.stroke();
+  x.fillStyle = '#1a1206'; x.font = '700 64px "Space Grotesk", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(text, 64, 68);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: false }));
+  s.scale.set(2.4, 2.4, 1);
+  return s;
+}
+
+// Ribbon that hugs the terrain along a list of {x, z} points
+function ribbonGeometry(pts, width, terrain) {
+  const pos = [], uv = [], idx = [];
+  let dist = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+    let tx = b.x - a.x, tz = b.z - a.z; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
+    if (i > 0) dist += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
+    for (const side of [-1, 1]) {
+      const x = pts[i].x - tz * side * width / 2, z = pts[i].z + tx * side * width / 2;
+      pos.push(x, terrain.heightAt(x, z) + 0.2, z); uv.push(dist / 2.4, side < 0 ? 0 : 1);
+    }
+    if (i > 0) { const k = i * 2; idx.push(k - 2, k - 1, k, k - 1, k + 1, k); }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  return g;
+}
+
+const routeGroup = new THREE.Group(); scene.add(routeGroup);
+function buildRoute(terrain) {
+  routeGroup.traverse(o => { o.geometry?.dispose(); if (o.isSprite) o.material.map.dispose(); o.material?.dispose(); });
+  routeGroup.clear();
+  const wps = PERSEVERANCE_ROUTE.map((geo, i) => ({ ...ROUTE_PROJ.project(geo), geo, idx: i, done: false }));
+  const curve = new THREE.CatmullRomCurve3(wps.map(w => new THREE.Vector3(w.x, 0, w.z)), false, 'centripetal');
+  const n = wps.length, segs = [], path = [];
+  const line = o => ({ transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4, ...o });
+  for (let i = 0; i < n - 1; i++) {
+    const len = Math.hypot(wps[i + 1].x - wps[i].x, wps[i + 1].z - wps[i].z), steps = Math.max(10, Math.ceil(len * 1.6));
+    const pts = [];
+    for (let s = 0; s <= steps; s++) { const v = curve.getPoint((i + s / steps) / (n - 1)); pts.push({ x: v.x, z: v.z }); }
+    path.push(pts);
+    const g = ribbonGeometry(pts, 1.8, terrain);
+    const track = new THREE.Mesh(g, new THREE.MeshBasicMaterial(line({ color: 0xffb547, opacity: 0.18 })));
+    const arrows = new THREE.Mesh(g, new THREE.MeshBasicMaterial(line({ color: 0xffb547, map: chevronTex, opacity: 0.9, polygonOffsetFactor: -5, polygonOffsetUnits: -5 })));
+    routeGroup.add(track, arrows); segs.push({ track, arrows });
+  }
+  wps.forEach((w, i) => {
+    const g = new THREE.Group(); g.position.set(w.x, terrain.heightAt(w.x, w.z), w.z);
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 60, 16, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0xffb547, transparent: true, opacity: 0.25, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false }));
+    beam.position.y = 30;
+    const ring = new THREE.Mesh(new THREE.RingGeometry(4.2, 4.7, 48), new THREE.MeshBasicMaterial({ color: 0xffb547, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.35;
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 3.2, 8), new THREE.MeshStandardMaterial({ color: 0xd8dce2, metalness: 0.4, roughness: 0.4 }));
+    pole.position.y = 1.6; pole.castShadow = true;
+    const label = labelSprite(String(i + 1)); label.position.y = 4.2;
+    g.add(beam, ring, pole, label); routeGroup.add(g);
+    Object.assign(w, { g, beam, ring, label });
+  });
+  // Reference marker: center of Jezero Crater
+  const c = ROUTE_PROJ.project(JEZERO_CENTER);
+  const cring = new THREE.Mesh(new THREE.RingGeometry(6.4, 6.9, 64), new THREE.MeshBasicMaterial({ color: 0xdfe5ee, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }));
+  cring.rotation.x = -Math.PI / 2; cring.position.set(c.x, terrain.heightAt(c.x, c.z) + 0.35, c.z);
+  const clabel = labelSprite('J'); clabel.material.color.set(0xdfe5ee); clabel.position.set(c.x, terrain.heightAt(c.x, c.z) + 3.5, c.z);
+  routeGroup.add(cring, clabel);
+  state.route = { wps, segs, path, next: 0, center: { ...c, seen: false } };
+  refreshRouteVisuals();
+}
+
+function refreshRouteVisuals() {
+  const r = state.route; if (!r) return;
+  r.segs.forEach((s, i) => {
+    const done = r.wps[i + 1].done, active = i === r.next - 1, col = done ? 0x3ddc97 : 0xffb547;
+    s.track.material.color.set(col); s.arrows.material.color.set(col);
+    s.arrows.material.opacity = done ? 0.5 : active ? 1 : 0.35;
+    s.track.material.opacity = active ? 0.32 : 0.14;
+  });
+  r.wps.forEach((w, i) => {
+    const col = w.done ? 0x3ddc97 : 0xffb547;
+    w.ring.material.color.set(col); w.label.material.color.set(col); w.beam.material.color.set(col);
+    w.beam.material.opacity = w.done ? 0 : i === r.next ? 0.35 : 0.1;
+  });
+}
+
+function updateRoute(dt) {
+  const r = state.route;
+  if (!r || state.mission !== 'route') return null;
+  chevronTex.offset.x -= dt * 0.8;
+  const p = rover.position, tt = performance.now() / 1000;
+  r.wps.forEach((w, i) => { w.label.position.y = 4.2 + (i === r.next ? Math.sin(tt * 3) * 0.3 : 0); w.beam.visible = !rover.underground; });
+  if (state.mode !== 'play' || rover.underground || state.elevator) return null;
+  if (r.next < r.wps.length) {
+    const w = r.wps[r.next];
+    if (Math.hypot(p.x - w.x, p.z - w.z) < 5) { completeWaypoint(r.next); return null; }
+    for (let i = r.next + 1; i < r.wps.length; i++) {
+      const f = r.wps[i];
+      if (Math.hypot(p.x - f.x, p.z - f.z) < 5) return { wrong: w };
+    }
+  }
+  if (!r.center.seen && Math.hypot(p.x - r.center.x, p.z - r.center.z) < 7) {
+    r.center.seen = true;
+    toast(t('jezeroName'), `${fmtCoord(JEZERO_CENTER)} · ${t('jezeroFact')}`);
+  }
+  return null;
+}
+
+function completeWaypoint(i) {
+  const r = state.route, w = r.wps[i];
+  w.done = true; r.next = i + 1;
+  refreshRouteVisuals(); renderMissionList();
+  toast(t('waypointReached', `${i + 1}. ${routeName(i)}`), `${fmtCoord(w.geo)} · ${t('route').facts[i]}`, 'ok');
+  if (r.next === r.wps.length) setTimeout(() => showMissionComplete('route'), 1400);
+}
+
+function renderRouteList() {
+  const r = state.route; if (!r) return;
+  const list = $('m-list');
+  list.innerHTML = r.wps.map((w, i) => `<li class="${w.done ? 'done' : i === r.next ? 'next' : ''}"><span class="dot">${w.done ? '' : i + 1}</span><span class="nm2"><span class="rn"></span><span class="sub">${fmtCoord(w.geo)}</span></span><span class="d"></span></li>`).join('');
+  list.querySelectorAll('.rn').forEach((el, i) => { el.textContent = routeName(i); });
+  $('m-count').textContent = `${r.wps.filter(w => w.done).length}/${r.wps.length}`;
+  $('m-hint').textContent = `${t('hint_route')} ${t('scale', ROUTE_PROJ.ratio.toLocaleString(lang === 'es' ? 'es-ES' : 'en-US'))}`;
+}
+
+function drawRouteMinimap(toPx) {
+  const r = state.route; if (!r) return;
+  const [cx, cz] = toPx(r.center.x, r.center.z);
+  mmx.strokeStyle = 'rgba(255,255,255,.6)'; mmx.lineWidth = 2; mmx.setLineDash([5, 5]);
+  mmx.beginPath(); mmx.arc(cx, cz, 12, 0, Math.PI * 2); mmx.stroke(); mmx.setLineDash([]);
+  r.path.forEach((seg, i) => {
+    const done = r.wps[i + 1].done, active = i === r.next - 1;
+    mmx.strokeStyle = done ? '#3ddc97' : '#ffb547'; mmx.lineWidth = active ? 5 : 3; mmx.globalAlpha = done || active ? 1 : 0.55;
+    mmx.beginPath(); seg.forEach((q, j) => { const [x, z] = toPx(q.x, q.z); if (j) mmx.lineTo(x, z); else mmx.moveTo(x, z); }); mmx.stroke();
+  });
+  mmx.globalAlpha = 1;
+  mmx.font = '700 12px "JetBrains Mono", monospace'; mmx.textAlign = 'center'; mmx.textBaseline = 'middle';
+  r.wps.forEach((w, i) => {
+    const [x, z] = toPx(w.x, w.z);
+    mmx.fillStyle = w.done ? '#3ddc97' : '#ffb547'; mmx.beginPath(); mmx.arc(x, z, 9, 0, Math.PI * 2); mmx.fill();
+    mmx.fillStyle = '#1a1206'; mmx.fillText(String(i + 1), x, z + 1);
+  });
+}
+
+const compassTargets = () => state.mission === 'route'
+  ? (state.route && state.route.next < state.route.wps.length ? [state.route.wps[state.route.next]] : [])
+  : state.pois;
+
+function placeRoverStart() {
+  const terrain = state.current_terrain;
+  const s = state.mission === 'route' && state.route ? state.route.wps[0] : { x: 0, z: -12 * S };
+  rover.position.set(s.x, terrain.heightAt(s.x, s.z) + 4, s.z);
+  rover.velocity_y = 0;
+}
+
+function setMission(m, { silent = false } = {}) {
+  state.mission = m === 'route' ? 'route' : 'science';
+  try { localStorage.setItem('mars-mission', state.mission); } catch (e) { /* storage unavailable */ }
+  poiGroup.visible = state.mission === 'science';
+  routeGroup.visible = state.mission === 'route';
+  document.querySelector('.mission').classList.toggle('route', state.mission === 'route');
+  document.querySelectorAll('[data-mission-switch] button').forEach(b => b.classList.toggle('active', b.dataset.mission === state.mission));
+  if (!state.current_terrain) return;
+  if (state.mode === 'menu') placeRoverStart();
+  renderMissionList();
+  if (!silent && state.mode === 'play') toast(t('missionSwitched', t('m_' + state.mission)), state.mission === 'route' ? t('routeIntroBody') : t('landingBody'));
+}
+
+// =====================================================================
+// CONTROL FUNCTIONS (load_terrain, toggle_tunnels, reset_world)
+// =====================================================================
+function load_terrain(key, { silent = false } = {}) {
+  if (state.current_terrain) state.current_terrain.destroy();
+  if (state.tunnels) { state.tunnels.destroy(); state.tunnels = null; }
+  const [name, params] = TERRAIN_PRESETS[key];
+  const terrain = new TerrainGenerator(name, params).generate();
+  scene.add(terrain.group);
+  Object.assign(state, { current_terrain: terrain, current_key: key, show_tunnels: false });
+  rover.underground = false; state.elevator = null;
+
+  // Reposition the rover at (0, ·, -12) as in the original
+  rover.velocity_y = 0; rover.yaw = 0; rover.distance = 0; power = 100; state.elapsed = 0;
+  buildPOIs(key, terrain);
+  buildRoute(terrain);
+  placeRoverStart();
+  setMission(state.mission, { silent: true });
+  buildMinimapBase();
+
+  renderSiteName();
+  document.querySelectorAll('[data-terrain]').forEach(b => b.classList.toggle('active', b.dataset.terrain === key));
+  document.getElementById('btn-tunnels').classList.remove('active');
+  if (!silent) toast(t('terrainLoaded', terrainName(key)), siteText(key).desc);
+}
+
+function toggle_tunnels() {
+  if (!state.show_tunnels) {
+    if (!state.tunnels) state.tunnels = new UndergroundTunnel().build(-12, (x, z) => state.current_terrain.heightAt(x, z));
+    else state.tunnels.setEnabled(true);
+    state.show_tunnels = true;
+    toast(t('tunnelsOn'), t('tunnelsOnBody'));
+  } else {
+    if (rover.underground) exitTunnel(true);
+    state.tunnels.setEnabled(false);
+    state.show_tunnels = false;
+    toast(t('tunnelsOff'));
+  }
+  state.current_terrain.setXray(state.show_tunnels);
+  document.getElementById('btn-tunnels').classList.toggle('active', state.show_tunnels);
+}
+
+function enterTunnel() {
+  const tn = state.tunnels;
+  state.elevator = { from: rover.position.y, to: tn.floorY, t: 0, down: true };
+  rover.position.x = tn.shaft.cx; rover.position.z = tn.shaft.cz;
+  toast(t('descending'), t('descendingBody'));
+}
+function exitTunnel(instant = false) {
+  const tn = state.tunnels, top = state.current_terrain.heightAt(tn.shaft.cx, tn.shaft.cz);
+  if (instant) { rover.underground = false; rover.position.set(tn.shaft.cx, top, tn.shaft.cz); state.elevator = null; return; }
+  state.elevator = { from: rover.position.y, to: top, t: 0, down: false };
+  rover.position.x = tn.shaft.cx; rover.position.z = tn.shaft.cz;
+}
+
+function reset_world() { load_terrain(state.current_key); }
+
+// =====================================================================
+// ORBIT CAMERA (right-click to orbit, as in the original)
+// =====================================================================
+const orbit = { distance: 18, yaw: Math.PI, pitch: 25, smooth: 6, drag: false, lx: 0, ly: 0 };
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('pointerdown', e => { orbit.drag = true; orbit.lx = e.clientX; orbit.ly = e.clientY; canvas.setPointerCapture(e.pointerId); canvas.focus(); });
+canvas.addEventListener('pointerup', e => { orbit.drag = false; canvas.releasePointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove', e => {
+  if (!orbit.drag || state.mode !== 'play') return;
+  orbit.yaw -= (e.clientX - orbit.lx) * 0.0055;
+  orbit.pitch = clamp(orbit.pitch + (e.clientY - orbit.ly) * 0.25, -20, 80);
+  orbit.lx = e.clientX; orbit.ly = e.clientY;
+});
+canvas.addEventListener('wheel', e => { e.preventDefault(); orbit.distance = clamp(orbit.distance + e.deltaY * 0.02, 6, 50); }, { passive: false });
+
+function updateCamera(dt) {
+  if (state.mode === 'menu' || state.mode === 'complete') orbit.yaw += dt * 0.07;
+  const rp = THREE.MathUtils.degToRad(orbit.pitch);
+  const target = rover.position.clone().add(new THREE.Vector3(0, 2, 0));
+  const desired = target.clone().add(new THREE.Vector3(Math.sin(orbit.yaw) * Math.cos(rp), Math.sin(rp), Math.cos(orbit.yaw) * Math.cos(rp)).multiplyScalar(state.mode === 'menu' ? 26 : orbit.distance));
+  if (!rover.underground && !state.show_tunnels) {
+    desired.x = clamp(desired.x, -HALF, HALF); desired.z = clamp(desired.z, -HALF, HALF);
+    desired.y = Math.max(desired.y, state.current_terrain.heightAt(desired.x, desired.z) + 1.5);
+  }
+  camera.position.lerp(desired, damp(orbit.smooth, dt));
+  camera.lookAt(target);
+}
+
+// =====================================================================
+// INPUT
+// =====================================================================
+const keys = {};
+const down = (...k) => k.some(x => keys[x]);
+window.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'f1', 'f2', 'f3', 'f4'].includes(k)) e.preventDefault();
+  keys[k] = true;
+  if (e.repeat) return;
+  if (k === 'escape' && !document.getElementById('complete-screen').classList.contains('hidden')) { document.getElementById('btn-mc-continue').click(); return; }
+  if (state.mode === 'complete' && k !== 'l') return;
+  if (k === 'escape') { if (!document.getElementById('help-screen').classList.contains('hidden')) closeHelp(); else if (state.mode === 'play') pause(); else if (state.mode === 'pause') resume(); return; }
+  if (['1', '2', '3', '4'].includes(k)) selectTerrain(k);
+  else if (/^f[1-4]$/.test(k)) selectTerrain(k[1]);
+  if (k === 'l') { applyLanguage(lang === 'es' ? 'en' : 'es'); return; }
+  if (k === 'm') { setMission(state.mission === 'route' ? 'science' : 'route'); return; }
+  if (state.mode !== 'play') return;
+  if (k === 't') toggle_tunnels();
+  else if (k === 'c') weather.next();
+  else if (k === 'r') reset_world();
+  else if (k === 'e' && state.show_tunnels && !state.elevator) {
+    if (!rover.underground && state.tunnels.inShaft(rover.position.x, rover.position.z)) enterTunnel();
+    else if (rover.underground && state.tunnels.inShaft(rover.position.x, rover.position.z)) exitTunnel();
+  }
+});
+window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+
+function selectTerrain(k) {
+  if (state.mode === 'pause') return;
+  if (k !== state.current_key || state.mode === 'play') showLoading(t('generating', terrainName(k)), () => load_terrain(k, { silent: state.mode !== 'play' }));
+}
+
+// =====================================================================
+// ROVER SIMULATION
+// =====================================================================
+const UP = new THREE.Vector3(0, 1, 0);
+function updateRover(dt) {
+  const terrain = state.current_terrain, p = rover.position;
+  const prev = p.clone();
+
+  if (state.elevator) {                                   // shaft elevator
+    const el = state.elevator; el.t = Math.min(1, el.t + dt / 2);
+    p.y = lerp(el.from, el.to, el.t * el.t * (3 - 2 * el.t));
+    if (el.t >= 1) { rover.underground = el.down; state.elevator = null; rover.velocity_y = 0; if (!el.down) toast(t('backSurface')); }
+  } else if (state.mode === 'play') {
+    const fwd = (down('w', 'arrowup') ? 1 : 0) - (down('s', 'arrowdown') ? 1 : 0);
+    const side = (down('d', 'arrowright') ? 1 : 0) - (down('a', 'arrowleft') ? 1 : 0);
+    const f = new THREE.Vector3(-Math.sin(orbit.yaw), 0, -Math.cos(orbit.yaw));
+    const r = new THREE.Vector3(Math.cos(orbit.yaw), 0, -Math.sin(orbit.yaw));
+    const dir = f.multiplyScalar(fwd).add(r.multiplyScalar(side));
+    if (dir.lengthSq() > 0) {
+      dir.normalize();
+      const sp = rover.speed * (power > 0 ? 1 : 0.35);
+      const nx = p.x + dir.x * sp * dt, nz = p.z + dir.z * sp * dt;
+      if (rover.underground) {
+        const tn = state.tunnels;
+        if (tn.inside(nx, nz)) { p.x = nx; p.z = nz; } else if (tn.inside(nx, p.z)) p.x = nx; else if (tn.inside(p.x, nz)) p.z = nz;
+      } else { p.x = clamp(nx, -EDGE, EDGE); p.z = clamp(nz, -EDGE, EDGE); }
+      rover.yaw = lerpAngle(rover.yaw, Math.atan2(dir.x, dir.z), damp(8, dt));
+    }
+    // Jump and gravity (original rules)
+    if (keys[' '] && rover.is_grounded) { rover.velocity_y = rover.jump_power; rover.is_grounded = false; }
+    rover.velocity_y += rover.gravity * dt;
+    p.y += rover.velocity_y * dt;
+    const ground = rover.underground ? state.tunnels.floorY : terrain.heightAt(p.x, p.z);
+    if (rover.underground) p.y = Math.min(p.y, state.tunnels.floorY + 0.8);
+    if (p.y <= ground || (rover.is_grounded && p.y - ground < 0.35)) { p.y = ground; rover.velocity_y = 0; rover.is_grounded = true; }
+    else rover.is_grounded = false;
+  } else if (state.mode === 'menu') {
+    p.y = terrain.heightAt(p.x, p.z);
+  }
+
+  // Orientation: heading + tilt from the terrain normal
+  const n = rover.underground || state.elevator ? UP : terrain.normalAt(p.x, p.z);
+  const qTilt = new THREE.Quaternion().setFromUnitVectors(UP, n);
+  rover.tilt.slerp(qTilt, damp(8, dt));
+  rover.obj.quaternion.copy(rover.tilt).multiply(new THREE.Quaternion().setFromAxisAngle(UP, rover.yaw));
+
+  const moved = Math.hypot(p.x - prev.x, p.z - prev.z);
+  rover.distance += moved;
+  rover.currentSpeed = lerp(rover.currentSpeed, moved / Math.max(dt, 1e-4), damp(6, dt));
+  rover.wheels.forEach(w => w.rotation.x += moved / 0.34);
+  rover.beacon.material.emissiveIntensity = 2 + Math.sin(performance.now() / 200) * 1.5;
+
+  // Power: drains while driving, solar recharge depends on the weather
+  const sunlight = rover.underground ? 0 : { clear: 1, sunset: 0.45, storm: 0.15, night: 0 }[weather.current];
+  power = clamp(power - moved * 0.05 + sunlight * dt * 0.8 - dt * 0.05, 0, 100);
+  if (power === 0 && !rover._lowWarned) { rover._lowWarned = true; toast(t('powerOut'), t('powerOutBody'), 'warn'); }
+  if (power > 10) rover._lowWarned = false;
+
+  // Brighter headlight at night, in storms or underground
+  const dark = rover.underground ? 1 : { clear: 0.15, sunset: 0.6, storm: 0.8, night: 1 }[weather.current];
+  rover.headlight.intensity = lerp(rover.headlight.intensity, 15 + dark * 110, damp(3, dt));
+}
+
+// ---------- Science beacons ----------
+function updatePOIs(dt) {
+  if (state.mission !== 'science') return null;
+  const p = rover.position, t = performance.now() / 1000;
+  let active = null;
+  for (const poi of state.pois) {
+    poi.gem.rotation.y += dt * 1.5; poi.gem.position.y = 2.2 + Math.sin(t * 2 + poi.x) * 0.25;
+    poi.beam.visible = !poi.done && !rover.underground;
+    if (poi.done) continue;
+    const d = Math.hypot(p.x - poi.x, p.z - poi.z);
+    if (state.mode === 'play' && !rover.underground && d < 4.5) {
+      active = poi; poi.progress = Math.min(1, poi.progress + dt / 2.2);
+      if (poi.progress >= 1) completePOI(poi);
+    } else poi.progress = Math.max(0, poi.progress - dt);
+  }
+  return active;
+}
+function completePOI(poi) {
+  poi.done = true;
+  poi.gem.material.color.set(0x3ddc97); poi.gem.material.emissive.set(0x3ddc97); poi.ring.material.color.set(0x3ddc97);
+  const n = state.pois.filter(q => q.done).length;
+  toast(t('sampleAnalyzed', poiName(poi)), siteText(state.current_key).facts[poi.idx], 'ok');
+  if (n === state.pois.length) setTimeout(() => showMissionComplete('science'), 1400);
+  renderMissionList();
+}
+function renderMissionList() {
+  if (state.mission === 'route') return renderRouteList();
+  $('m-hint').textContent = t('targetsHint');
+  const list = document.getElementById('m-list');
+  const next = nearestPOI();
+  list.innerHTML = state.pois.map(p => `<li class="${p.done ? 'done' : p === next ? 'next' : ''}"><span class="dot"></span>${poiName(p)}<span class="d" data-poi="${state.pois.indexOf(p)}"></span></li>`).join('');
+  document.getElementById('m-count').textContent = `${state.pois.filter(p => p.done).length}/${state.pois.length}`;
+}
+function nearestPOI() {
+  let best = null, bd = Infinity;
+  for (const p of state.pois) { if (p.done) continue; const d = Math.hypot(p.x - rover.position.x, p.z - rover.position.z); if (d < bd) { bd = d; best = p; } }
+  return best;
+}
+
+// ---------- Dust ----------
+function updateDust(dt) {
+  const a = dust.geometry.attributes.position, c = camera.position, w = weather.cur.wind, n = Math.round(weather.cur.dust);
+  const t = performance.now() / 1000;
+  for (let i = 0; i < n; i++) {
+    let x = a.getX(i) + (w + Math.sin(t + i) * 0.6) * dt, y = a.getY(i) + Math.sin(t * 0.7 + i * 0.3) * 0.25 * dt, z = a.getZ(i) + w * 0.35 * dt;
+    if (x - c.x > 70) x -= 140; else if (x - c.x < -70) x += 140;
+    if (z - c.z > 70) z -= 140; else if (z - c.z < -70) z += 140;
+    if (y - c.y > 25) y -= 45; else if (y - c.y < -20) y += 45;
+    a.setXYZ(i, x, y, z);
+  }
+  a.needsUpdate = true;
+}
+
+// =====================================================================
+// UI: HUD, minimap, compass, notifications
+// =====================================================================
+const $ = id => document.getElementById(id);
+function toast(title, body = '', kind = '') {
+  const el = document.createElement('div'); el.className = `toast panel ${kind}`;
+  el.innerHTML = `<div class="t"></div>${body ? '<div class="b"></div>' : ''}`;
+  el.querySelector('.t').textContent = title; if (body) el.querySelector('.b').textContent = body;
+  const box = $('toasts'); box.prepend(el);
+  while (box.children.length > 3) box.lastChild.remove();
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 400); }, body ? 6500 : 2800);
+}
+
+// Weather buttons
+for (const wk of Object.keys(WEATHER)) {
+  const b = document.createElement('button'); b.dataset.key = wk;
+  b.innerHTML = `${WEATHER_ICONS[wk]}<span></span>`;
+  b.onclick = () => { weather.apply(wk); toast(t('weatherToast', t('w_' + wk)), t('wn_' + wk)); };
+  $('weather-switch').appendChild(b);
+}
+// Terrain bar (HUD) and cards (start screen)
+for (const k of Object.keys(TERRAIN_PRESETS)) {
+  const info = SITE_INFO[k];
+  const b = document.createElement('button'); b.className = 'tcard'; b.dataset.terrain = k;
+  b.innerHTML = `<div class="k">F${k} · ${k}</div><div class="nm"></div><div class="tg"></div>`;
+  b.onclick = () => selectTerrain(k);
+  $('terrain-bar').appendChild(b);
+
+  const c = document.createElement('button'); c.className = 'site'; c.dataset.terrain = k;
+  c.innerHTML = `<div class="art" style="background:${info.art}"></div><div class="k"></div><div class="nm"></div><div class="ds"></div><div class="tags"></div>`;
+  c.onclick = () => selectTerrain(k);
+  $('site-grid').appendChild(c);
+}
+function fmtLat(v) { return `${Math.abs(v).toFixed(2)}°${v >= 0 ? 'N' : 'S'}`; }
+function fmtLon(v) { return `${Math.abs(v).toFixed(2)}°${v >= 0 ? 'E' : t('west')}`; }
+
+// ---------- Language selector ----------
+document.querySelectorAll('[data-lang-switch]').forEach(box => {
+  for (const [code, label] of [['es', 'Español'], ['en', 'English']]) {
+    const b = document.createElement('button'); b.dataset.lang = code; b.textContent = label; b.lang = code;
+    b.onclick = () => applyLanguage(code); box.appendChild(b);
+  }
+});
+function applyLanguage(l) {
+  lang = I18N[l] ? l : 'en';
+  try { localStorage.setItem('mars-lang', lang); } catch (e) { /* storage unavailable */ }
+  document.documentElement.lang = lang;
+  document.title = t('title');
+  document.querySelector('meta[name="description"]').content = t('metaDesc');
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
+  document.querySelectorAll('[data-i18n-aria]').forEach(el => el.setAttribute('aria-label', t(el.dataset.i18nAria)));
+  document.querySelectorAll('[data-lang-switch] button').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  $('lang-code').textContent = lang.toUpperCase();
+  document.querySelectorAll('[data-mission-switch] button').forEach(b => { b.textContent = t('m_' + b.dataset.mission); });
+  document.querySelectorAll('#weather-switch button').forEach(b => {
+    const w = t('w_' + b.dataset.key); b.querySelector('span').textContent = w; b.title = `${t('weather')}: ${w} (C)`;
+  });
+  document.querySelectorAll('.tcard').forEach(b => {
+    const k = b.dataset.terrain; b.querySelector('.nm').textContent = t('terrainsShort')[k]; b.querySelector('.tg').textContent = siteText(k).short;
+  });
+  document.querySelectorAll('.site').forEach(c => {
+    const k = c.dataset.terrain, info = SITE_INFO[k], txt = siteText(k);
+    c.querySelector('.k').textContent = `${t('site')} ${k} · ${fmtLat(info.lat)} ${fmtLon(info.lon)}`;
+    c.querySelector('.nm').textContent = terrainName(k); c.querySelector('.ds').textContent = txt.desc;
+    const tags = c.querySelector('.tags'); tags.replaceChildren(...txt.tags.map(tg => { const sp = document.createElement('span'); sp.textContent = tg; return sp; }));
+  });
+  if (state.current_terrain) { renderSiteName(); renderMissionList(); }
+  if (state.completeInfo) renderMissionComplete();
+}
+function renderSiteName() {
+  const n = terrainName(state.current_key);
+  $('t-loc').textContent = n; $('m-site').textContent = n; $('pause-site').textContent = n;
+}
+$('btn-lang').onclick = () => applyLanguage(lang === 'es' ? 'en' : 'es');
+document.querySelectorAll('[data-mission-switch]').forEach(box => {
+  for (const m of ['science', 'route']) {
+    const b = document.createElement('button'); b.dataset.mission = m;
+    b.onclick = () => setMission(m); box.appendChild(b);
+  }
+});
+
+$('btn-tunnels').onclick = () => toggle_tunnels();
+$('btn-weather').onclick = () => weather.next();
+$('btn-reset').onclick = () => reset_world();
+$('btn-pause').onclick = () => pause();
+$('btn-start').onclick = () => startGame();
+$('btn-resume').onclick = () => resume();
+$('btn-restart').onclick = () => { resume(); reset_world(); };
+$('btn-menu').onclick = () => toMenu();
+$('btn-help-start').onclick = $('btn-help-pause').onclick = () => $('help-screen').classList.remove('hidden');
+$('btn-help-close').onclick = () => closeHelp();
+function closeHelp() { $('help-screen').classList.add('hidden'); }
+document.querySelectorAll('button').forEach(b => b.addEventListener('mouseup', () => b.blur()));
+
+function startGame() {
+  state.mode = 'play';
+  $('start-screen').classList.add('hidden'); $('hud').classList.remove('hidden');
+  orbit.yaw = Math.PI; orbit.pitch = 25; orbit.distance = 18;
+  canvas.focus();
+  if (state.mission === 'route') toast(t('routeIntro'), t('routeIntroBody'), 'ok');
+  else toast(t('landing', terrainName(state.current_key)), t('landingBody'), 'ok');
+}
+// ---------- Mission complete popup ----------
+const nextSiteKey = k => String((Number(k) % 4) + 1);
+function showMissionComplete(kind) {
+  if (state.mode !== 'play') return;
+  state.completeInfo = { kind, key: state.current_key, distance: rover.distance, elapsed: state.elapsed };
+  renderMissionComplete();
+  state.mode = 'complete';
+  $('prompt').classList.add('hidden');
+  $('complete-screen').classList.remove('hidden');
+  launchConfetti();
+  $('btn-mc-continue').focus();
+}
+function renderMissionComplete() {
+  const c = state.completeInfo; if (!c) return;
+  const total = c.kind === 'route' ? state.route.wps.length : state.pois.length;
+  $('mc-kicker').textContent = `${t('m_' + c.kind)} · ${terrainName(c.key)}`;
+  $('mc-body').textContent = t(c.kind === 'route' ? 'mcBodyRoute' : 'mcBodyScience', terrainName(c.key));
+  $('mc-s1-l').textContent = t(c.kind === 'route' ? 'mcWaypoints' : 'mcSamples');
+  $('mc-s1').textContent = `${total}/${total}`;
+  $('mc-s2').textContent = c.distance > 1000 ? `${(c.distance / 1000).toFixed(2)} km` : `${c.distance.toFixed(0)} m`;
+  $('mc-s3').textContent = `${Math.floor(c.elapsed / 60)}:${String(Math.floor(c.elapsed % 60)).padStart(2, '0')}`;
+  $('btn-mc-next').textContent = t('mcNext', terrainName(nextSiteKey(c.key)));
+  $('btn-mc-switch').textContent = t('mcSwitchTo', t('m_' + (c.kind === 'route' ? 'science' : 'route')));
+}
+function closeMissionComplete() {
+  $('complete-screen').classList.add('hidden'); $('mc-confetti').replaceChildren();
+  state.completeInfo = null; state.mode = 'play'; canvas.focus();
+}
+function launchConfetti() {
+  const box = $('mc-confetti'); box.replaceChildren();
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const cols = ['#ff6a3d', '#ffb547', '#3ddc97', '#4fd1ff', '#ffffff'];
+  for (let i = 0; i < 44; i++) {
+    const c = document.createElement('i'); c.className = 'confetti';
+    Object.assign(c.style, { left: `${Math.random() * 100}%`, background: cols[i % cols.length],
+      animationDelay: `${Math.random() * 0.7}s`, animationDuration: `${2 + Math.random() * 1.6}s` });
+    box.appendChild(c);
+  }
+}
+$('btn-mc-continue').onclick = () => closeMissionComplete();
+$('btn-mc-next').onclick = () => { const k = nextSiteKey(state.current_key); closeMissionComplete(); selectTerrain(k); };
+$('btn-mc-switch').onclick = () => { closeMissionComplete(); setMission(state.mission === 'route' ? 'science' : 'route'); };
+$('btn-mc-menu').onclick = () => { closeMissionComplete(); toMenu(); };
+
+function pause() { state.mode = 'pause'; $('pause-screen').classList.remove('hidden'); }
+function resume() { state.mode = 'play'; $('pause-screen').classList.add('hidden'); canvas.focus(); }
+function toMenu() {
+  $('pause-screen').classList.add('hidden'); $('hud').classList.add('hidden'); $('start-screen').classList.remove('hidden');
+  state.mode = 'menu'; if (state.show_tunnels) toggle_tunnels();
+}
+function showLoading(text, fn) {
+  const l = $('loading'); $('loading-text').textContent = text; l.style.opacity = 1; l.classList.remove('hidden');
+  setTimeout(() => { fn(); requestAnimationFrame(() => { l.style.opacity = 0; setTimeout(() => l.classList.add('hidden'), 500); }); }, 60);
+}
+
+// ---------- Minimap ----------
+const mm = $('minimap'), mmx = mm.getContext('2d'), mmBase = document.createElement('canvas');
+function buildMinimapBase() {
+  const R = 160, t = state.current_terrain; mmBase.width = mmBase.height = R;
+  const ctx = mmBase.getContext('2d'), img = ctx.createImageData(R, R), col = t.mesh.geometry.attributes.color, N = SEG + 1;
+  for (let y = 0; y < R; y++) for (let x = 0; x < R; x++) {
+    const i = Math.round(x / (R - 1) * SEG), j = Math.round(y / (R - 1) * SEG), k = j * N + i;
+    const wx = -HALF + i * W / SEG, wz = -HALF + j * W / SEG;
+    const nn = t.normalAt(wx, wz, 2), shade = clamp(0.55 + (nn.x * -0.6 + nn.z * -0.6 + nn.y * 0.6), 0.25, 1.4);
+    const c = new THREE.Color(col.getX(k), col.getY(k), col.getZ(k)).convertLinearToSRGB();
+    const o = (y * R + x) * 4;
+    img.data[o] = clamp(c.r * 255 * shade, 0, 255); img.data[o + 1] = clamp(c.g * 255 * shade, 0, 255); img.data[o + 2] = clamp(c.b * 255 * shade, 0, 255); img.data[o + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+function drawMinimap() {
+  const s = mm.width, k = s / W, toPx = (x, z) => [(x + HALF) * k, (z + HALF) * k];
+  mmx.clearRect(0, 0, s, s);
+  mmx.save(); mmx.beginPath(); mmx.arc(s / 2, s / 2, s / 2, 0, Math.PI * 2); mmx.clip();
+  mmx.drawImage(mmBase, 0, 0, s, s);
+  mmx.fillStyle = 'rgba(0,0,0,.12)'; mmx.fillRect(0, 0, s, s);
+  if (state.show_tunnels && state.tunnels) {
+    mmx.fillStyle = 'rgba(255,170,80,.75)';
+    for (const r of state.tunnels.rects) { const [x1, z1] = toPx(r.x1 - 1.4, r.z1 - 1.4), [x2, z2] = toPx(r.x2 + 1.4, r.z2 + 1.4); mmx.fillRect(x1, z1, x2 - x1, z2 - z1); }
+    const [sx, sz] = toPx(state.tunnels.shaft.cx, state.tunnels.shaft.cz);
+    mmx.strokeStyle = '#4fd1ff'; mmx.lineWidth = 3; mmx.beginPath(); mmx.arc(sx, sz, 9, 0, Math.PI * 2); mmx.stroke();
+  }
+  if (state.mission === 'route') drawRouteMinimap(toPx);
+  else for (const p of state.pois) {
+    const [x, z] = toPx(p.x, p.z);
+    mmx.fillStyle = p.done ? '#3ddc97' : '#4fd1ff'; mmx.beginPath(); mmx.arc(x, z, 6, 0, Math.PI * 2); mmx.fill();
+    mmx.strokeStyle = 'rgba(0,0,0,.6)'; mmx.lineWidth = 2; mmx.stroke();
+  }
+  // Camera view cone
+  const [rx, rz] = toPx(rover.position.x, rover.position.z), cy = Math.atan2(-Math.sin(orbit.yaw), -Math.cos(orbit.yaw));
+  mmx.fillStyle = 'rgba(255,255,255,.12)'; mmx.beginPath(); mmx.moveTo(rx, rz);
+  mmx.arc(rx, rz, 70, Math.PI / 2 - cy - 0.5, Math.PI / 2 - cy + 0.5); mmx.closePath(); mmx.fill();
+  // Rover
+  mmx.translate(rx, rz); mmx.rotate(-rover.yaw + Math.PI);
+  mmx.fillStyle = '#ff6a3d'; mmx.strokeStyle = '#fff'; mmx.lineWidth = 2.5;
+  mmx.beginPath(); mmx.moveTo(0, -13); mmx.lineTo(9, 10); mmx.lineTo(0, 5); mmx.lineTo(-9, 10); mmx.closePath(); mmx.fill(); mmx.stroke();
+  mmx.restore();
+  mmx.strokeStyle = 'rgba(255,255,255,.18)'; mmx.lineWidth = 2; mmx.beginPath(); mmx.arc(s / 2, s / 2, s / 2 - 1, 0, Math.PI * 2); mmx.stroke();
+}
+
+// ---------- Compass (camera heading; North = -Z) ----------
+const cp = $('compass'), cpx = cp.getContext('2d');
+function bearing(dx, dz) { return (THREE.MathUtils.radToDeg(Math.atan2(dx, -dz)) + 360) % 360; }
+function drawCompass() {
+  const w = cp.width, h = cp.height, heading = bearing(-Math.sin(orbit.yaw), -Math.cos(orbit.yaw)), pxPerDeg = w / 150;
+  cpx.clearRect(0, 0, w, h);
+  cpx.textAlign = 'center'; cpx.textBaseline = 'middle';
+  const names = t('compass');
+  for (let d = -80; d <= 80; d++) {
+    const deg = Math.round(heading) + d, dd = ((deg % 360) + 360) % 360, x = w / 2 + (deg - heading) * pxPerDeg;
+    if (dd % 5) continue;
+    const major = dd % 45 === 0;
+    cpx.fillStyle = major ? '#fff' : 'rgba(255,255,255,.35)';
+    cpx.fillRect(x - 1, 0, 2, major ? 22 : dd % 15 === 0 ? 16 : 9);
+    if (major) { cpx.font = '600 26px "Space Grotesk", sans-serif'; cpx.fillStyle = dd === 0 ? '#ff6a3d' : '#fff'; cpx.fillText(names[dd], x, 60); }
+    else if (dd % 15 === 0) { cpx.font = '20px "JetBrains Mono", monospace'; cpx.fillStyle = 'rgba(255,255,255,.45)'; cpx.fillText(dd, x, 60); }
+  }
+  // Target markers
+  for (const p of compassTargets()) {
+    if (p.done) continue;
+    let rel = bearing(p.x - rover.position.x, p.z - rover.position.z) - heading;
+    rel = ((rel + 540) % 360) - 180;
+    if (Math.abs(rel) > 75) continue;
+    const x = w / 2 + rel * pxPerDeg;
+    cpx.fillStyle = state.mission === 'route' ? '#ffb547' : '#4fd1ff'; cpx.beginPath(); cpx.moveTo(x, h - 4); cpx.lineTo(x - 9, h - 18); cpx.lineTo(x + 9, h - 18); cpx.closePath(); cpx.fill();
+  }
+  cpx.font = '600 22px "JetBrains Mono", monospace'; cpx.fillStyle = '#ff6a3d';
+  cpx.fillText(String(Math.round(heading) % 360).padStart(3, '0') + '°', w / 2, 86);
+}
+
+// ---------- Telemetry ----------
+let hudTimer = 0;
+function updateHUD(dt, activePOI, routeInfo) {
+  state.lmst += dt * 2;                          // accelerated mission clock
+  if (state.lmst >= 24 * 60) { state.lmst -= 24 * 60; state.sol++; }
+  hudTimer += dt; if (hudTimer < 0.1) return; hudTimer = 0;
+  const p = rover.position, info = SITE_INFO[state.current_key];
+  const hh = Math.floor(state.lmst / 60), mi = Math.floor(state.lmst % 60);
+  $('t-sol').textContent = `SOL ${state.sol} · ${String(hh).padStart(2, '0')}:${String(mi).padStart(2, '0')} LMST`;
+  $('t-coords').textContent = `${fmtLat(info.lat - p.z / 59000 * 1)}  ${fmtLon(info.lon + p.x / 59000)}`;
+  $('t-elev').innerHTML = `${p.y >= 0 ? '+' : ''}${p.y.toFixed(1)}<small>m</small>`;
+  $('t-speed').innerHTML = `${rover.currentSpeed.toFixed(1)}<small>m/s</small>`;
+  const tiltDeg = THREE.MathUtils.radToDeg(Math.acos(clamp(new THREE.Vector3(0, 1, 0).applyQuaternion(rover.tilt).y, -1, 1)));
+  $('t-tilt').innerHTML = `${tiltDeg.toFixed(0)}<small>°</small>`;
+  const temp = weather.cur.temp + (rover.underground ? 15 : 0) + Math.sin(performance.now() / 4000) * 1.5;
+  $('t-temp').innerHTML = `${temp.toFixed(0)}<small>°C</small>`;
+  $('t-dist').innerHTML = rover.distance > 1000 ? `${(rover.distance / 1000).toFixed(2)}<small>km</small>` : `${rover.distance.toFixed(0)}<small>m</small>`;
+  $('t-power-v').textContent = `${power.toFixed(0)}%`;
+  $('t-power').querySelector('i').style.width = `${power}%`;
+  $('t-power').classList.toggle('low', power < 25);
+  const st = $('t-status');
+  if (rover.underground) { st.textContent = t('st_under'); st.className = 'status info'; }
+  else if (power < 25) { st.textContent = t('st_power'); st.className = 'status warn'; }
+  else if (tiltDeg > 30) { st.textContent = t('st_slope'); st.className = 'status warn'; }
+  else if (weather.current === 'storm') { st.textContent = t('st_storm'); st.className = 'status warn'; }
+  else { st.textContent = t('nominal'); st.className = 'status'; }
+
+  // Distances to targets
+  if (state.mission === 'route' && state.route) {
+    document.querySelectorAll('#m-list li').forEach((li, i) => {
+      const w = state.route.wps[i]; if (!w) return;
+      li.querySelector('.d').textContent = !w.done && i === state.route.next ? `${Math.hypot(w.x - p.x, w.z - p.z).toFixed(0)} m` : '';
+    });
+  }
+  const next = state.mission === 'science' ? nearestPOI() : null;
+  if (state.mission === 'science') document.querySelectorAll('#m-list li').forEach((li, i) => {
+    const poi = state.pois[i]; if (!poi) return;
+    li.classList.toggle('next', poi === next);
+    li.querySelector('.d').textContent = poi.done ? '' : `${Math.hypot(poi.x - p.x, poi.z - p.z).toFixed(0)} m`;
+  });
+
+  // Contextual prompt
+  const pr = $('prompt');
+  if (state.mode !== 'play') { pr.classList.add('hidden'); return; }
+  if (activePOI) {
+    pr.innerHTML = `${t('analyzing')} <b></b><div class="bar"><i style="width:${(activePOI.progress * 100).toFixed(0)}%"></i></div>`;
+    pr.querySelector('b').textContent = poiName(activePOI); pr.classList.remove('hidden');
+  } else if (routeInfo && routeInfo.wrong) {
+    pr.innerHTML = `${t('wrongOrder')} <b></b>`;
+    pr.querySelector('b').textContent = `${routeInfo.wrong.idx + 1}. ${routeName(routeInfo.wrong.idx)}`; pr.classList.remove('hidden');
+  } else if (state.show_tunnels && !state.elevator && state.tunnels.inShaft(p.x, p.z)) {
+    pr.innerHTML = `<kbd>E</kbd> ${rover.underground ? t('upSurface') : t('descend')}`; pr.classList.remove('hidden');
+  } else pr.classList.add('hidden');
+}
+
+// =====================================================================
+// STARTUP
+// =====================================================================
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+applyLanguage(lang);
+state.mission = (() => {
+  const q = new URLSearchParams(location.search).get('mission');
+  if (q === 'route' || q === 'science') return q;
+  try { return localStorage.getItem('mars-mission') === 'route' ? 'route' : 'science'; } catch (e) { return 'science'; }
+})();
+setMission(state.mission, { silent: true });
+weather.apply('clear', true);
+load_terrain('1', { silent: true });
+const params = new URLSearchParams(location.search);       // optional demo parameters: ?terrain=2&weather=night&play
+if (params.get('terrain') && TERRAIN_PRESETS[params.get('terrain')]) load_terrain(params.get('terrain'), { silent: true });
+if (params.get('weather') && WEATHER[params.get('weather')]) weather.apply(params.get('weather'), true);
+if (params.has('play')) startGame();
+if (params.has('tunnels')) toggle_tunnels();
+if (params.has('debug')) window.marsDebug = { state, rover, showMissionComplete };   // test hook, only with ?debug
+
+const clock = new THREE.Clock();
+function frame() {
+  requestAnimationFrame(frame);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (state.mode === 'play') state.elapsed += dt;
+  if (state.mode !== 'pause') {
+    weather.update(dt);
+    updateRover(dt);
+    const activePOI = updatePOIs(dt);
+    const routeInfo = updateRoute(dt);
+    updateDust(dt);
+    updateHUD(dt, activePOI, routeInfo);
+  }
+  updateCamera(state.mode === 'pause' ? 0 : dt);
+  // The sun (and its shadow) follows the rover
+  sun.position.copy(rover.position).addScaledVector(weather.cur.sunDir, 150);
+  sun.target.position.copy(rover.position);
+  sky.position.copy(camera.position); stars.position.copy(camera.position); moons.position.copy(camera.position);
+  if (state.mode === 'play') { drawMinimap(); drawCompass(); }
+  renderer.render(scene, camera);
+}
+frame();
+requestAnimationFrame(() => { const l = $('loading'); l.style.opacity = 0; setTimeout(() => l.classList.add('hidden'), 500); });
+</script>
+</body>
+</html>
