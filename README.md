@@ -2,7 +2,7 @@
 
 A 3D Mars exploration game for the **NASA International Space Apps Challenge** by Team Isabelinos Espaciales.
 
-**Play:** open https://gustavoduqueo.github.io/isabelinosespaciales/ in Chrome. Nothing to install.
+**Play:** open https://nicollequiceno02.github.io/isabelinosespaciales/ in Chrome. Nothing to install.
 
 ## Features
 - Four real landing sites (Valles Marineris, Gale Crater, North Pole (Ice) and Olympus Mons), generated with the same algorithm and parameters as `a-marte.py`.
